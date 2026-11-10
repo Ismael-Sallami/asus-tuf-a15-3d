@@ -1,5 +1,7 @@
 # ASUS TUF Gaming A15 — 3D Hardware Teardown & Scrollytelling Experience
 
+> 🌐 **Live Interactive 3D Demo:** [https://ismael-sallami.github.io/asus-tuf-a15-3d/](https://ismael-sallami.github.io/asus-tuf-a15-3d/)
+
 ![ASUS TUF A15 Teardown Demo](assets/teardown-demo.gif)
 
 [![Three.js](https://img.shields.io/badge/Three.js-r170-black?style=for-the-badge&logo=three.js)](https://threejs.org/)

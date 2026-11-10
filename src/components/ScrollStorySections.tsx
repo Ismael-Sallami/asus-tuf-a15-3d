@@ -71,48 +71,48 @@ export const ScrollStorySections: React.FC<ScrollStorySectionsProps> = ({
           <section
             key={phase.id}
             id={`phase-section-${index}`}
-            className="h-screen w-full flex items-center px-6 md:pl-28 xl:pl-80 pr-6 lg:pr-96 pointer-events-none"
+            className="h-screen w-full flex items-end pb-8 md:pb-0 md:items-center px-3 md:pl-28 xl:pl-80 pr-3 lg:pr-96 pointer-events-none"
           >
-            <div className="max-w-lg pointer-events-auto">
-              <div className="bg-[#0B0F17]/90 backdrop-blur-md border border-[#252E3E] cut-corner-br p-6 md:p-8 shadow-2xl relative">
+            <div className="w-full max-w-lg pointer-events-auto">
+              <div className="bg-[#0B0F17]/94 backdrop-blur-md border border-[#252E3E] cut-corner-br p-4 md:p-8 shadow-2xl relative">
                 {/* Indicador de código militar */}
-                <div className="flex items-center justify-between mb-3 border-b border-[#1A2230] pb-2">
-                  <span className="text-[11px] font-['JetBrains_Mono'] text-[#00E5FF] font-bold tracking-widest flex items-center gap-1.5">
+                <div className="flex items-center justify-between mb-2 md:mb-3 border-b border-[#1A2230] pb-1.5 md:pb-2">
+                  <span className="text-[10px] md:text-[11px] font-['JetBrains_Mono'] text-[#00E5FF] font-bold tracking-widest flex items-center gap-1.5">
                     <span className="w-2 h-2 bg-[#00E5FF] rounded-full animate-ping" />
                     {phase.code}
                   </span>
-                  <span className="text-[11px] font-['JetBrains_Mono'] text-slate-400">
+                  <span className="text-[10px] md:text-[11px] font-['JetBrains_Mono'] text-slate-400">
                     ETAPA {index + 1} DE {DISASSEMBLY_PHASES.length}
                   </span>
                 </div>
 
                 {/* Título de la etapa de desmontaje */}
-                <h2 className="text-2xl md:text-3xl font-['Orbitron'] font-black text-white mb-2 leading-tight">
+                <h2 className="text-xl md:text-3xl font-['Orbitron'] font-black text-white mb-1.5 md:mb-2 leading-tight">
                   {phase.title}
                 </h2>
 
                 {/* Resumen explicativo */}
-                <p className="text-sm md:text-base font-['Rajdhani'] text-slate-300 font-medium leading-relaxed mb-5">
+                <p className="text-xs md:text-base font-['Rajdhani'] text-slate-300 font-medium leading-relaxed mb-3.5 md:mb-5 line-clamp-3 md:line-clamp-none">
                   {phase.summary}
                 </p>
 
                 {/* Botón de inspección y detalles */}
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5 md:gap-3">
                   <button
                     onClick={() => {
                       soundManager.playMechanicalClick();
                       onSelectComponent(phase.targetComponent);
                     }}
-                    className="flex items-center space-x-2 px-4 py-2 bg-[#FFB800] hover:bg-[#FFA500] text-black font-['Rajdhani'] font-bold text-xs uppercase tracking-wider rounded transition-colors shadow-[0_0_15px_rgba(255,184,0,0.25)]"
+                    className="flex items-center space-x-2 px-3 md:px-4 py-1.5 md:py-2 bg-[#FFB800] hover:bg-[#FFA500] text-black font-['Rajdhani'] font-bold text-xs uppercase tracking-wider rounded transition-colors shadow-[0_0_15px_rgba(255,184,0,0.25)]"
                   >
-                    <Info className="w-4 h-4" />
+                    <Info className="w-3.5 h-3.5 md:w-4 md:h-4" />
                     <span>Ficha de Ingeniería</span>
                   </button>
 
                   {index === 0 && (
-                    <div className="flex items-center space-x-1.5 text-xs text-slate-400 font-['JetBrains_Mono']">
+                    <div className="flex items-center space-x-1.5 text-[11px] md:text-xs text-slate-400 font-['JetBrains_Mono']">
                       <ArrowDown className="w-3.5 h-3.5 animate-bounce text-[#FFB800]" />
-                      <span>Desliza para iniciar el desmontaje</span>
+                      <span>Desliza para desmontar</span>
                     </div>
                   )}
                 </div>

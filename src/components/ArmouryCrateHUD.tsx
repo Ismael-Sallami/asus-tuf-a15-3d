@@ -6,7 +6,8 @@ import {
   Gauge,
   Zap,
   Sliders,
-  Layers
+  Layers,
+  X
 } from 'lucide-react';
 
 interface ArmouryCrateHUDProps {
@@ -29,7 +30,9 @@ export const ArmouryCrateHUD: React.FC<ArmouryCrateHUDProps> = ({
   selectedComponentId
 }) => {
   const [activeProfile, setActiveProfile] = useState<'silent' | 'performance' | 'turbo'>('turbo');
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+  );
 
   const handleProfileChange = (profile: 'silent' | 'performance' | 'turbo') => {
     setActiveProfile(profile);
@@ -69,8 +72,8 @@ export const ArmouryCrateHUD: React.FC<ArmouryCrateHUDProps> = ({
 
   return (
     <aside
-      className={`fixed top-20 right-4 z-40 transition-all duration-300 ${
-        isCollapsed ? 'translate-x-[calc(100%-42px)]' : 'translate-x-0'
+      className={`fixed top-16 md:top-20 right-1 md:right-4 z-40 transition-all duration-300 ${
+        isCollapsed ? 'translate-x-[calc(100%-36px)] md:translate-x-[calc(100%-42px)]' : 'translate-x-0'
       }`}
     >
       <div className="flex items-start">
@@ -80,27 +83,39 @@ export const ArmouryCrateHUD: React.FC<ArmouryCrateHUDProps> = ({
             soundManager.playMechanicalClick();
             setIsCollapsed(!isCollapsed);
           }}
-          className="bg-[#121824] hover:bg-[#1A2234] border-l border-y border-[#252D3D] text-[#FFB800] p-2.5 rounded-l-md shadow-lg flex flex-col items-center justify-center space-y-2 mt-4"
+          className="bg-[#121824] hover:bg-[#1A2234] border-l border-y border-[#252D3D] text-[#FFB800] p-2 md:p-2.5 rounded-l-md shadow-lg flex flex-col items-center justify-center space-y-1.5 md:space-y-2 mt-3 md:mt-4"
           title={isCollapsed ? 'Desplegar Armoury Crate HUD' : 'Plegar HUD'}
         >
-          <Activity className="w-4 h-4 animate-pulse" />
-          <span className="text-[10px] font-['Orbitron'] font-bold tracking-widest [writing-mode:vertical-lr] rotate-180">
-            {isCollapsed ? 'TELEMETRY' : 'MINIMIZE'}
+          <Activity className="w-3.5 h-3.5 md:w-4 md:h-4 animate-pulse" />
+          <span className="text-[9px] md:text-[10px] font-['Orbitron'] font-bold tracking-widest [writing-mode:vertical-lr] rotate-180">
+            {isCollapsed ? 'HUD' : 'MIN'}
           </span>
         </button>
 
         {/* Contenedor principal estilo Armoury Crate */}
-        <div className="w-80 bg-[#0E131C]/92 backdrop-blur-md border border-[#252D3D] cut-corner-br shadow-2xl p-4 text-slate-200">
+        <div className="w-[calc(100vw-3.2rem)] max-w-[310px] md:w-80 bg-[#0E131C]/95 backdrop-blur-md border border-[#252D3D] cut-corner-br shadow-2xl p-3 md:p-4 text-slate-200">
           {/* Cabecera del HUD */}
-          <div className="flex items-center justify-between border-b border-[#202736] pb-2.5 mb-3">
+          <div className="flex items-center justify-between border-b border-[#202736] pb-2 mb-3">
             <div className="flex items-center space-x-2">
-              <div className="w-2.5 h-2.5 bg-[#FFB800] rotate-45 shadow-[0_0_8px_#FFB800]" />
-              <h3 className="font-['Orbitron'] font-black text-xs tracking-wider text-white">
-                ARMOURY CRATE // TELEMETRÍA
+              <div className="w-2 h-2 bg-[#FFB800] rotate-45 shadow-[0_0_8px_#FFB800]" />
+              <h3 className="font-['Orbitron'] font-black text-[11px] md:text-xs tracking-wider text-white">
+                ARMOURY CRATE
               </h3>
             </div>
-            <div className="text-[11px] font-['JetBrains_Mono'] text-[#00E5FF] bg-[#121B28] px-2 py-0.5 rounded border border-[#00E5FF]/20">
-              LIVE SENSORS
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] font-['JetBrains_Mono'] text-[#00E5FF] bg-[#121B28] px-1.5 py-0.5 rounded border border-[#00E5FF]/20">
+                LIVE
+              </span>
+              <button
+                onClick={() => {
+                  soundManager.playMechanicalClick();
+                  setIsCollapsed(true);
+                }}
+                className="p-1 rounded hover:bg-[#1B2332] text-slate-400 hover:text-white"
+                title="Plegar HUD"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import gsap from 'gsap';
 import { LaptopModel } from './LaptopModel';
-import { ViewMode } from '../types/laptop';
+import { ViewMode, AppTheme } from '../types/laptop';
 
 export interface SceneCallbacks {
   onComponentSelect?: (componentId: string | null) => void;
@@ -41,8 +41,19 @@ export class SceneManager {
   private fanRPM: number = 2400;
 
   // Luces dinámicas
+  private ambientLight!: THREE.AmbientLight;
+  private keyLight!: THREE.DirectionalLight;
+  private fillLight!: THREE.DirectionalLight;
   private tufAmberLight!: THREE.SpotLight;
   private tufCyanLight!: THREE.SpotLight;
+
+  // Elementos de pedestal y suelo
+  private pedestalMesh!: THREE.Mesh;
+  private pedestalMat!: THREE.MeshStandardMaterial;
+  private shadowMat!: THREE.ShadowMaterial;
+  private gridHelper!: THREE.GridHelper;
+  private ringMesh!: THREE.Mesh;
+  private innerRingMesh!: THREE.Mesh;
 
   constructor(container: HTMLElement, callbacks: SceneCallbacks = {}) {
     this.container = container;
@@ -107,29 +118,29 @@ export class SceneManager {
    */
   private setupLighting(): void {
     // Luz ambiental oscura para mantener contraste dramático
-    const ambientLight = new THREE.AmbientLight(0x131924, 1.2);
-    this.scene.add(ambientLight);
+    this.ambientLight = new THREE.AmbientLight(0x131924, 1.2);
+    this.scene.add(this.ambientLight);
 
     // Luz clave superior (Key Light)
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    keyLight.position.set(12, 22, 14);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
-    keyLight.shadow.camera.near = 5;
-    keyLight.shadow.camera.far = 60;
-    keyLight.shadow.camera.left = -18;
-    keyLight.shadow.camera.right = 18;
-    keyLight.shadow.camera.top = 18;
-    keyLight.shadow.camera.bottom = -18;
-    keyLight.shadow.bias = -0.0003;
-    keyLight.shadow.normalBias = 0.02;
-    this.scene.add(keyLight);
+    this.keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    this.keyLight.position.set(12, 22, 14);
+    this.keyLight.castShadow = true;
+    this.keyLight.shadow.mapSize.width = 2048;
+    this.keyLight.shadow.mapSize.height = 2048;
+    this.keyLight.shadow.camera.near = 5;
+    this.keyLight.shadow.camera.far = 60;
+    this.keyLight.shadow.camera.left = -18;
+    this.keyLight.shadow.camera.right = 18;
+    this.keyLight.shadow.camera.top = 18;
+    this.keyLight.shadow.camera.bottom = -18;
+    this.keyLight.shadow.bias = -0.0003;
+    this.keyLight.shadow.normalBias = 0.02;
+    this.scene.add(this.keyLight);
 
     // Luz de relleno fría (Fill Light)
-    const fillLight = new THREE.DirectionalLight(0x4a6572, 1.0);
-    fillLight.position.set(-14, 10, -10);
-    this.scene.add(fillLight);
+    this.fillLight = new THREE.DirectionalLight(0x4a6572, 1.0);
+    this.fillLight.position.set(-14, 10, -10);
+    this.scene.add(this.fillLight);
 
     // Luz de recorte 1: Ámbar TUF Gaming (#FFB800) destacando aristas mecánicas
     this.tufAmberLight = new THREE.SpotLight(0xffb800, 3.5, 45, Math.PI / 4, 0.4, 1.2);
@@ -150,31 +161,31 @@ export class SceneManager {
   private setupPedestal(): void {
     // 1. Pedestal base circular con bisel metálico táctico
     const pedestalGeo = new THREE.CylinderGeometry(15.5, 16.0, 0.4, 64);
-    const pedestalMat = new THREE.MeshStandardMaterial({
+    this.pedestalMat = new THREE.MeshStandardMaterial({
       color: 0x0a0d13,
       roughness: 0.85,
       metalness: 0.25
     });
-    const pedestalMesh = new THREE.Mesh(pedestalGeo, pedestalMat);
-    pedestalMesh.position.y = -4.7;
-    pedestalMesh.receiveShadow = true;
-    this.scene.add(pedestalMesh);
+    this.pedestalMesh = new THREE.Mesh(pedestalGeo, this.pedestalMat);
+    this.pedestalMesh.position.y = -4.7;
+    this.pedestalMesh.receiveShadow = true;
+    this.scene.add(this.pedestalMesh);
 
     // 2. Plano sutil de sombra de contacto (ShadowMaterial) sobre el pedestal
     const shadowGeo = new THREE.PlaneGeometry(34, 34);
-    const shadowMat = new THREE.ShadowMaterial({
+    this.shadowMat = new THREE.ShadowMaterial({
       opacity: 0.52
     });
-    const shadowPlane = new THREE.Mesh(shadowGeo, shadowMat);
+    const shadowPlane = new THREE.Mesh(shadowGeo, this.shadowMat);
     shadowPlane.rotation.x = -Math.PI / 2;
     shadowPlane.position.y = -4.49;
     shadowPlane.receiveShadow = true;
     this.scene.add(shadowPlane);
 
     // 3. Suelo con retícula técnica de ingeniería
-    const gridHelper = new THREE.GridHelper(48, 48, 0x2a3648, 0x141a24);
-    gridHelper.position.y = -4.48;
-    this.scene.add(gridHelper);
+    this.gridHelper = new THREE.GridHelper(48, 48, 0x2a3648, 0x141a24);
+    this.gridHelper.position.y = -4.48;
+    this.scene.add(this.gridHelper);
 
     // 4. Anillo perimetral ámbar TUF Gaming (#FFB800)
     const ringGeo = new THREE.RingGeometry(14.8, 15.1, 64);
@@ -184,10 +195,10 @@ export class SceneManager {
       transparent: true,
       opacity: 0.4
     });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = -4.47;
-    this.scene.add(ring);
+    this.ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    this.ringMesh.rotation.x = Math.PI / 2;
+    this.ringMesh.position.y = -4.47;
+    this.scene.add(this.ringMesh);
 
     // 5. Anillo concéntrico interior cian (#00E5FF)
     const innerRingGeo = new THREE.RingGeometry(8.9, 9.05, 48);
@@ -197,10 +208,10 @@ export class SceneManager {
       transparent: true,
       opacity: 0.25
     });
-    const innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
-    innerRing.rotation.x = Math.PI / 2;
-    innerRing.position.y = -4.47;
-    this.scene.add(innerRing);
+    this.innerRingMesh = new THREE.Mesh(innerRingGeo, innerRingMat);
+    this.innerRingMesh.rotation.x = Math.PI / 2;
+    this.innerRingMesh.position.y = -4.47;
+    this.scene.add(this.innerRingMesh);
   }
 
   /**
@@ -371,6 +382,185 @@ export class SceneManager {
    */
   public setFanRPM(rpm: number): void {
     this.fanRPM = rpm;
+  }
+
+  /**
+   * Transiciona la cámara cinemática hacia un ángulo preconfigurado de estudio
+   */
+  public setCameraPreset(preset: 'perspective' | 'top' | 'cooling' | 'front' | 'bottom'): void {
+    const presets: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
+      perspective: { pos: [18, 14, 26], target: [0, 0, 0] },
+      top: { pos: [0, 25, 0.4], target: [0, 0, 0] },
+      cooling: { pos: [-18, 11, 8], target: [-2, 1, -1] },
+      front: { pos: [0, 5, 26], target: [0, 2, 0] },
+      bottom: { pos: [14, -14, 18], target: [0, -1, 0] }
+    };
+
+    const targetConfig = presets[preset] || presets.perspective;
+    this.setCameraPosition(targetConfig.pos, targetConfig.target, 1.2);
+  }
+
+  /**
+   * Conmuta el tema de renderizado de la escena 3D (Studio Claro, Cyberpunk Oscuro, o Blueprint CAD)
+   */
+  public setTheme(theme: AppTheme): void {
+    if (theme === 'studio') {
+      // Tema Claro Minimalista Estilo Apple / Inside MacBook
+      this.scene.background = new THREE.Color(0xf6f7f9);
+      this.scene.fog = new THREE.FogExp2(0xf6f7f9, 0.015);
+
+      this.ambientLight.color.set(0xffffff);
+      this.ambientLight.intensity = 2.4;
+
+      this.keyLight.color.set(0xffffff);
+      this.keyLight.intensity = 2.8;
+
+      this.fillLight.color.set(0xe2e8f0);
+      this.fillLight.intensity = 1.6;
+
+      this.tufAmberLight.intensity = 0.5;
+      this.tufCyanLight.intensity = 0.5;
+
+      this.pedestalMat.color.set(0xffffff);
+      this.pedestalMat.roughness = 0.35;
+      this.pedestalMat.metalness = 0.05;
+
+      this.shadowMat.opacity = 0.16;
+      this.gridHelper.visible = false;
+      this.ringMesh.visible = false;
+      this.innerRingMesh.visible = false;
+
+      this.renderer.toneMappingExposure = 1.08;
+    } else if (theme === 'blueprint') {
+      // Tema CAD Blueprint Técnico
+      this.scene.background = new THREE.Color(0x07152b);
+      this.scene.fog = new THREE.FogExp2(0x07152b, 0.02);
+
+      this.ambientLight.color.set(0x0e2a4a);
+      this.ambientLight.intensity = 1.8;
+
+      this.keyLight.color.set(0x00e5ff);
+      this.keyLight.intensity = 2.5;
+
+      this.fillLight.color.set(0x0077b6);
+      this.fillLight.intensity = 1.4;
+
+      this.tufAmberLight.intensity = 1.2;
+      this.tufCyanLight.intensity = 4.2;
+
+      this.pedestalMat.color.set(0x0a192f);
+      this.pedestalMat.roughness = 0.7;
+      this.pedestalMat.metalness = 0.3;
+
+      this.shadowMat.opacity = 0.4;
+      this.gridHelper.visible = true;
+      this.ringMesh.visible = true;
+      this.innerRingMesh.visible = true;
+
+      this.renderer.toneMappingExposure = 1.15;
+    } else {
+      // Tema Cyber Militar Oscuro TUF (Por defecto)
+      this.scene.background = new THREE.Color(0x080a0d);
+      this.scene.fog = new THREE.FogExp2(0x080a0d, 0.022);
+
+      this.ambientLight.color.set(0x131924);
+      this.ambientLight.intensity = 1.2;
+
+      this.keyLight.color.set(0xffffff);
+      this.keyLight.intensity = 2.2;
+
+      this.fillLight.color.set(0x4a6572);
+      this.fillLight.intensity = 1.0;
+
+      this.tufAmberLight.intensity = 3.5;
+      this.tufCyanLight.intensity = 2.8;
+
+      this.pedestalMat.color.set(0x0a0d13);
+      this.pedestalMat.roughness = 0.85;
+      this.pedestalMat.metalness = 0.25;
+
+      this.shadowMat.opacity = 0.52;
+      this.gridHelper.visible = true;
+      this.ringMesh.visible = true;
+      this.innerRingMesh.visible = true;
+
+      this.renderer.toneMappingExposure = 1.15;
+    }
+  }
+
+  /**
+   * Aísla un subsistema específico (ej. refrigeración o silicio) aplicando efecto translúcido
+   */
+  public isolateCategory(category: string | null): void {
+    this.laptop.isolateCategory(category);
+  }
+
+  /**
+   * Calcula las coordenadas de pantalla 2D proyectadas para cada hotspot 3D en tiempo real
+   */
+  public getHotspotsScreenPositions(): Record<
+    string,
+    {
+      x: number;
+      y: number;
+      visible: boolean;
+      name: string;
+      code: string;
+      badge: string;
+      metric: string;
+      targetId: string;
+    }
+  > {
+    const result: Record<
+      string,
+      {
+        x: number;
+        y: number;
+        visible: boolean;
+        name: string;
+        code: string;
+        badge: string;
+        metric: string;
+        targetId: string;
+      }
+    > = {};
+
+    if (!this.container || !this.camera) return result;
+
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    const defs = this.laptop.getHotspotDefinitions();
+
+    defs.forEach((def) => {
+      const obj = def.getObject();
+      if (!obj) return;
+
+      const worldPos = new THREE.Vector3();
+      obj.localToWorld(worldPos.copy(def.localOffset));
+
+      const projected = worldPos.clone().project(this.camera);
+
+      // Si está por delante de la cámara y dentro del cuadrante visible
+      const inFront = projected.z < 1;
+      const x = ((projected.x + 1) / 2) * width;
+      const y = ((-projected.y + 1) / 2) * height;
+
+      // Margen de seguridad para no salirse de los límites visibles de la ventana
+      const inBounds = x >= 30 && x <= width - 30 && y >= 60 && y <= height - 90;
+
+      result[def.id] = {
+        x,
+        y,
+        visible: inFront && inBounds,
+        name: def.name,
+        code: def.code,
+        badge: def.badge,
+        metric: def.metric,
+        targetId: def.targetId
+      };
+    });
+
+    return result;
   }
 
   /**

@@ -26,6 +26,8 @@ export interface DisassemblyPhase {
 
 export type ViewMode = 'normal' | 'xray' | 'thermal';
 
+export type AppTheme = 'cyber' | 'studio' | 'blueprint';
+
 export interface TelemetryState {
   fps: number;
   cpuTemp: number;

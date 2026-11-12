@@ -7,8 +7,10 @@ import { HeaderNav } from './components/HeaderNav';
 import { ArmouryCrateHUD } from './components/ArmouryCrateHUD';
 import { ComponentModal } from './components/ComponentModal';
 import { ScrollStorySections } from './components/ScrollStorySections';
+import { HotspotsOverlay, HotspotData } from './components/HotspotsOverlay';
+import { TeardownController } from './components/TeardownController';
 
-import { ViewMode, ComponentDetail } from './types/laptop';
+import { ViewMode, ComponentDetail, AppTheme } from './types/laptop';
 import { COMPONENT_DETAILS, DISASSEMBLY_PHASES } from './data/laptopSpecs';
 import { soundManager } from './utils/soundEffects';
 
@@ -20,6 +22,7 @@ export const App: React.FC = () => {
 
   // Estados de visualización y control
   const [viewMode, setViewMode] = useState<ViewMode>('normal');
+  const [theme, setTheme] = useState<AppTheme>('cyber');
   const [isInspecting, setIsInspecting] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [selectedComponent, setSelectedComponent] = useState<ComponentDetail | null>(null);
@@ -30,6 +33,28 @@ export const App: React.FC = () => {
   const [cpuTemp, setCpuTemp] = useState<number>(48);
   const [gpuTemp, setGpuTemp] = useState<number>(44);
   const [fanRPM, setFanRPM] = useState<number>(2400);
+
+  // Estados para Hotspots 3D y Controles de Estudio estilo Inside MacBook
+  const [hotspots, setHotspots] = useState<Record<string, HotspotData>>({});
+  const [showHotspots, setShowHotspots] = useState<boolean>(true);
+  const [activeCameraPreset, setActiveCameraPreset] = useState<'perspective' | 'top' | 'cooling' | 'front' | 'bottom'>('perspective');
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
+  const autoPlayTweenRef = useRef<gsap.core.Tween | null>(null);
+
+  // Bucle de proyección 3D a 2D para las tarjetas flotantes de hotspots
+  useEffect(() => {
+    let animId: number;
+    const updateHotspotsLoop = () => {
+      if (sceneManagerRef.current && showHotspots) {
+        const coords = sceneManagerRef.current.getHotspotsScreenPositions();
+        setHotspots(coords);
+      }
+      animId = requestAnimationFrame(updateHotspotsLoop);
+    };
+    animId = requestAnimationFrame(updateHotspotsLoop);
+    return () => cancelAnimationFrame(animId);
+  }, [showHotspots]);
 
   // Inicialización del visor Three.js y configuración de ScrollTrigger
   useEffect(() => {
@@ -127,6 +152,14 @@ export const App: React.FC = () => {
     }
   };
 
+  // Cambio de tema global: Studio Claro, Cyber Oscuro, CAD Blueprint
+  const handleThemeChange = (newTheme: AppTheme) => {
+    setTheme(newTheme);
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setTheme(newTheme);
+    }
+  };
+
   // Alternar modo de inspección 360°
   const handleToggleInspect = () => {
     const nextState = !isInspecting;
@@ -190,10 +223,77 @@ export const App: React.FC = () => {
     }
   };
 
+  // Cambio manual del deslizador de despiece
+  const handleSliderPercentChange = (percent: number) => {
+    if (autoPlayTweenRef.current) {
+      autoPlayTweenRef.current.kill();
+      autoPlayTweenRef.current = null;
+      setIsAutoPlaying(false);
+    }
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    const targetY = (percent / 100) * maxScroll;
+    window.scrollTo({ top: targetY, behavior: 'instant' });
+  };
+
+  // Autoplay / Recorrido cinemático automático de 20s
+  const handleToggleAutoPlay = () => {
+    if (isAutoPlaying) {
+      if (autoPlayTweenRef.current) {
+        autoPlayTweenRef.current.kill();
+        autoPlayTweenRef.current = null;
+      }
+      setIsAutoPlaying(false);
+    } else {
+      setIsAutoPlaying(true);
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const currentScroll = window.scrollY;
+      const targetScroll = currentScroll >= maxScroll - 50 ? 0 : maxScroll;
+      const distanceRatio = Math.abs(targetScroll - currentScroll) / (maxScroll || 1);
+      const duration = Math.max(8, 20 * distanceRatio);
+
+      const obj = { y: currentScroll };
+      autoPlayTweenRef.current = gsap.to(obj, {
+        y: targetScroll,
+        duration,
+        ease: 'power1.inOut',
+        onUpdate: () => {
+          window.scrollTo(0, obj.y);
+        },
+        onComplete: () => {
+          setIsAutoPlaying(false);
+        }
+      });
+    }
+  };
+
+  // Selección de ángulo de cámara preconfigurado
+  const handleSelectCameraPreset = (preset: 'perspective' | 'top' | 'cooling' | 'front' | 'bottom') => {
+    setActiveCameraPreset(preset);
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setCameraPreset(preset);
+    }
+  };
+
+  // Aislamiento de capa estilo Inside MacBook
+  const handleSelectCategory = (cat: string | null) => {
+    setActiveCategory(cat);
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.isolateCategory(cat);
+    }
+  };
+
   const currentPhaseTitle = DISASSEMBLY_PHASES[currentPhaseIndex]?.title || 'ASUS TUF A15';
 
   return (
-    <div className="relative min-h-screen bg-[#080A0D] text-slate-100 font-['Rajdhani'] selection:bg-[#FFB800] selection:text-black">
+    <div
+      className={`relative min-h-screen font-['Rajdhani'] transition-colors duration-300 selection:bg-[#FFB800] selection:text-black ${
+        theme === 'studio'
+          ? 'bg-[#F6F7F9] text-slate-800'
+          : theme === 'blueprint'
+          ? 'bg-[#07152B] text-slate-100'
+          : 'bg-[#080A0D] text-slate-100'
+      }`}
+    >
       {/* Barra de Navegación Superior Fija */}
       <HeaderNav
         viewMode={viewMode}
@@ -203,12 +303,39 @@ export const App: React.FC = () => {
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
         currentPhaseName={currentPhaseTitle}
+        theme={theme}
+        onThemeChange={handleThemeChange}
       />
 
       {/* Contenedor del Viewport 3D Three.js Fijo de Fondo */}
       <div
         ref={canvasContainerRef}
         className="fixed inset-0 z-0 w-full h-full pointer-events-auto"
+      />
+
+      {/* Marcadores 3D flotantes anclados a las piezas físicas */}
+      <HotspotsOverlay
+        hotspots={hotspots}
+        isVisible={showHotspots && !isInspecting}
+        onSelectComponent={handleSelectComponent}
+        activeComponentId={selectedComponent?.id || null}
+        currentPhaseTarget={DISASSEMBLY_PHASES[currentPhaseIndex]?.targetComponent}
+        activeCategory={activeCategory}
+      />
+
+      {/* Barra de control flotante de Despiece continuo y Cámaras */}
+      <TeardownController
+        disassemblyPercent={disassemblyPercent}
+        onPercentChange={handleSliderPercentChange}
+        isAutoPlaying={isAutoPlaying}
+        onToggleAutoPlay={handleToggleAutoPlay}
+        activeCameraPreset={activeCameraPreset}
+        onSelectCameraPreset={handleSelectCameraPreset}
+        activeCategory={activeCategory}
+        onSelectCategory={handleSelectCategory}
+        showHotspots={showHotspots}
+        onToggleHotspots={() => setShowHotspots(!showHotspots)}
+        theme={theme}
       />
 
       {/* Panel Lateral de Telemetría Armoury Crate HUD */}
@@ -220,6 +347,7 @@ export const App: React.FC = () => {
         onFanSpeedPresetChange={handleFanSpeedPresetChange}
         onSelectComponent={handleSelectComponent}
         selectedComponentId={selectedComponent?.id || null}
+        theme={theme}
       />
 
       {/* Modal Desplegable de Especificaciones Técnicas Militares */}
@@ -240,11 +368,12 @@ export const App: React.FC = () => {
           currentPhaseIndex={currentPhaseIndex}
           onSelectComponent={handleSelectComponent}
           onJumpToPhase={handleJumpToPhase}
+          theme={theme}
         />
       </main>
 
       {/* Pie de página sutil con estado de ingeniería y atajos */}
-      <footer className="fixed bottom-3 left-6 z-30 hidden sm:flex items-center space-x-3 text-[11px] font-['JetBrains_Mono'] text-slate-400 bg-[#0B0E14]/80 backdrop-blur px-3 py-1.5 rounded border border-[#1E2736]">
+      <footer className="fixed bottom-3 left-6 z-30 hidden 2xl:flex items-center space-x-3 text-[11px] font-['JetBrains_Mono'] text-slate-400 bg-[#0B0E14]/80 backdrop-blur px-3 py-1.5 rounded border border-[#1E2736]">
         <div className="w-2 h-2 rounded-full bg-[#FFB800] animate-pulse" />
         <span>THREE.JS R170 // ACES FILMIC // WEB AUDIO API</span>
         <span className="text-[#2A364A]">|</span>

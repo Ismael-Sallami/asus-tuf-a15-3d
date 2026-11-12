@@ -42,6 +42,7 @@ export class LaptopModel {
 
   // Gestión de materiales y modos visuales
   private currentViewMode: ViewMode = 'normal';
+  private activeIsolatedCategory: string | null = null;
   private interactiveMeshes: THREE.Mesh[] = [];
   private originalMaterials: Map<THREE.Mesh, THREE.Material | THREE.Material[]> = new Map();
   private highlightedComponentId: string | null = null;
@@ -1107,6 +1108,150 @@ export class LaptopModel {
         }
       }
     });
+  }
+
+  /**
+   * Aísla un subsistema específico (ej. refrigeración, silicio o batería),
+   * aplicando un material holográfico translúcido tipo rayos X / ghost a las demás capas.
+   */
+  public isolateCategory(category: string | null): void {
+    this.activeIsolatedCategory = (category === 'all' || !category) ? null : category;
+
+    if (!this.activeIsolatedCategory) {
+      this.setViewMode(this.currentViewMode);
+      return;
+    }
+
+    const ghostMat = new THREE.MeshPhysicalMaterial({
+      color: 0x0f172a,
+      emissive: 0x070d18,
+      emissiveIntensity: 0.1,
+      transparent: true,
+      opacity: 0.12,
+      roughness: 0.85,
+      metalness: 0.1,
+      depthWrite: false
+    });
+
+    this.interactiveMeshes.forEach((mesh) => {
+      const orig = this.originalMaterials.get(mesh);
+      if (!orig) return;
+
+      const parentId = mesh.parent?.userData?.componentId || mesh.userData?.componentId;
+
+      let belongsToCategory = false;
+      if (this.activeIsolatedCategory === 'cooling' && parentId === 'cooling') belongsToCategory = true;
+      if (this.activeIsolatedCategory === 'motherboard' && (parentId === 'motherboard' || parentId === 'ram' || parentId === 'ssd')) belongsToCategory = true;
+      if (this.activeIsolatedCategory === 'battery' && parentId === 'battery') belongsToCategory = true;
+      if (this.activeIsolatedCategory === 'display' && parentId === 'display') belongsToCategory = true;
+      if (this.activeIsolatedCategory === 'chassis' && (parentId === 'chassis' || parentId === 'keyboard')) belongsToCategory = true;
+
+      if (belongsToCategory) {
+        mesh.material = orig;
+      } else {
+        mesh.material = ghostMat;
+      }
+    });
+
+    if (this.highlightedComponentId) {
+      this.highlightComponent(this.highlightedComponentId);
+    }
+  }
+
+  /**
+   * Puntos de anclaje espaciales 3D para etiquetas y hotspots interactivos
+   */
+  public getHotspotDefinitions() {
+    return [
+      {
+        id: 'cooling',
+        name: 'Arc Flow Fans™ Duales',
+        code: 'COOLING // 84 ASPAS',
+        badge: '0.1mm grosor variable',
+        metric: '2400-5800 RPM',
+        category: 'cooling',
+        targetId: 'cooling',
+        getObject: () => this.coolingGroup,
+        localOffset: new THREE.Vector3(-4.8, 0.45, -3.2)
+      },
+      {
+        id: 'cpu',
+        name: 'AMD Ryzen™ 7 7735HS',
+        code: 'CPU // 8C 16T // 4.75GHz',
+        badge: 'Zen 3+ 6nm FinFET',
+        metric: '48°C · 35-54W TDP',
+        category: 'motherboard',
+        targetId: 'motherboard',
+        getObject: () => this.motherboardGroup,
+        localOffset: new THREE.Vector3(-2.2, 0.45, -0.8)
+      },
+      {
+        id: 'gpu',
+        name: 'NVIDIA® GeForce RTX™ 4060',
+        code: 'GPU // AD107 // 8GB GDDR6',
+        badge: 'Ada Lovelace · DLSS 3',
+        metric: '44°C · 140W DynBoost',
+        category: 'motherboard',
+        targetId: 'motherboard',
+        getObject: () => this.motherboardGroup,
+        localOffset: new THREE.Vector3(2.2, 0.45, -0.8)
+      },
+      {
+        id: 'ram',
+        name: '16GB DDR5 4800MHz Dual-Channel',
+        code: 'RAM // 2x SO-DIMM',
+        badge: 'Micron / SK Hynix',
+        metric: 'Expandible a 64GB',
+        category: 'motherboard',
+        targetId: 'ram',
+        getObject: () => this.ramModulesGroup,
+        localOffset: new THREE.Vector3(-0.2, 0.45, -0.5)
+      },
+      {
+        id: 'ssd',
+        name: '1TB PCIe 4.0 NVMe M.2',
+        code: 'STORAGE // M.2 2280',
+        badge: 'Lectura hasta 5000 MB/s',
+        metric: '+1 Slot M.2 libre',
+        category: 'motherboard',
+        targetId: 'ssd',
+        getObject: () => this.ssdGroup,
+        localOffset: new THREE.Vector3(0, 0.35, 0)
+      },
+      {
+        id: 'battery',
+        name: 'Batería 90Wh 4 celdas Li-ion',
+        code: 'POWER // 90 WH HIGH DENSITY',
+        badge: 'Carga Rápida 50% / 30m',
+        metric: 'Hasta 12.5h reproducción',
+        category: 'battery',
+        targetId: 'battery',
+        getObject: () => this.batteryGroup,
+        localOffset: new THREE.Vector3(0, 0.35, 2.7)
+      },
+      {
+        id: 'display',
+        name: 'Panel IPS 15.6" 144Hz FHD',
+        code: 'DISPLAY // 144 HZ ADAPTIVE-SYNC',
+        badge: '100% sRGB · MUX Switch',
+        metric: 'NVIDIA Advanced Optimus',
+        category: 'display',
+        targetId: 'display',
+        getObject: () => this.screenGroup,
+        localOffset: new THREE.Vector3(0, 4.2, 0.1)
+      },
+      {
+        id: 'keyboard',
+        name: 'Teclado Aura Sync RGB con WASD',
+        code: 'DECK // RECORRIDO 1.7mm',
+        badge: 'Overstroke Technology',
+        metric: '20M pulsaciones vida útil',
+        category: 'chassis',
+        targetId: 'keyboard',
+        getObject: () => this.cCoverGroup,
+        localOffset: new THREE.Vector3(-3.8, 0.45, -0.4)
+      }
+    ];
   }
 
   /**

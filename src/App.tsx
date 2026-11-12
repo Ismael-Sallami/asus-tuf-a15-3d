@@ -417,7 +417,7 @@ export const App: React.FC = () => {
           </div>
 
           {/* Selector de tema: Studio Claro / Dark / CAD */}
-          <div className="pill-group" role="group" aria-label="Tema visual">
+          <div className="pill-group theme-pills" role="group" aria-label="Tema visual">
             <button
               className={`pill-btn ${theme === 'studio' ? 'active' : ''}`}
               onClick={() => handleThemeChange('studio')}

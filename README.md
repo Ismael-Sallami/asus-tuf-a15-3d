@@ -1,4 +1,4 @@
-# ASUS TUF Gaming A15 — 3D Hardware Teardown & Scrollytelling Experience
+# ASUS TUF Gaming A15 — 3D Hardware Teardown & Knolling Explorer
 
 > 🌐 **Live Interactive 3D Demo:** [https://ismael-sallami.github.io/asus-tuf-a15-3d/](https://ismael-sallami.github.io/asus-tuf-a15-3d/)
 
@@ -8,132 +8,77 @@
 [![WebGL](https://img.shields.io/badge/WebGL-2.0-990000?style=for-the-badge&logo=webgl)](https://www.khronos.org/webgl/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
-[![GSAP](https://img.shields.io/badge/GSAP-3.12-88CE02?style=for-the-badge&logo=greensock)](https://greensock.com/gsap/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 [![MIL-STD-810H](https://img.shields.io/badge/Standard-MIL--STD--810H-FFB800?style=for-the-badge)](https://en.wikipedia.org/wiki/MIL-STD-810)
 
-An interactive, high-fidelity 3D scrollytelling laboratory showcasing the internal architecture and thermal engineering of the ASUS TUF Gaming A15 (FA507). Built with Three.js, React, TypeScript, and GSAP ScrollTrigger, this project delivers a smooth 60 FPS exploded-view teardown of every subsystem, synchronized with real-time telemetry and procedural audio synthesis.
+An interactive 3D hardware teardown, component-level knolling inventory, and logic board architecture explorer for the **ASUS TUF Gaming A15 (FA507)**. Built from the ground up with Three.js, React 18, and TypeScript, it decomposes the laptop into **16 self-contained 3D subsystems** and **8 logic board functional blocks**, smoothly transitioning from a flush sealed chassis (`0%`), through a layered mechanical explosion (`1%–65%`) with live stage explanations, into an orthonormalized **4 × 4 Knolling Inventory Grid** (`65%–100%`) where every 3D part aligns above its technical explanation card.
 
-## Engineering Highlights
+## Key Engineering Features
 
-### Parametric Hardware Decomposition
-The 3D model decouples the physical chassis into independently translated mechanical layers along the vertical axis, preserving mechanical clearances and realistic disassembly hierarchy:
-- **D-Cover Base Plate:** High-density polymer lower chassis with molded honeycomb ventilation intakes, anti-slip rubber feet, and perimeter captive screws.
-- **90Wh High-Capacity Battery:** 4-cell Lithium-ion pack (15.4V, 5845mAh) with integrated management circuitry and braided wiring harness.
-- **Precision Audio Modules:** Dual side-firing stereo speaker acoustic chambers with rubber vibration dampers.
-- **Motherboard PCB:** High-density matte-black circuit board featuring procedurally generated multi-layer copper traces, surface-mount components, and VRM power delivery phases.
-- **Core Silicon Dies:** Bare-die AMD Ryzen 7 7735HS processor and NVIDIA GeForce RTX 4060 Laptop GPU with mirror-finish silicon surfaces and perimeter decoupling capacitors.
-- **Memory & Storage Subsystem:** Dual SO-DIMM DDR5-4800 memory modules with metallic heatspreaders, alongside a primary PCIe 4.0 NVMe M.2 SSD under a dedicated thermal sink and an accessible M.2 expansion slot.
-- **Cooling Assembly:** Four sintered-copper composite heatpipes connected to quad finned heatsink stacks and dual Arc Flow fans featuring 84 aerodynamically tapered blades (0.1mm thin at tips). Includes animated particle emitters simulating hot exhaust dissipation.
-- **C-Cover Keyboard Deck:** Brushed-finish upper chassis, integrated multi-touch trackpad, numeric keypad, and iconic translucent smoked WASD keycaps.
-- **15.6" Display Assembly:** 144Hz Full HD IPS panel housed in a reinforced lid with laser-etched TUF emblem and dual zinc-alloy friction hinges.
+### 1. Three-Stage Parametric Disassembly (`0% → 65% → 100%`)
+- **0% — Hermetically Sealed Chassis:** At `0%`, the top deck (`C-Cover`) and bottom service plate (`D-Cover`) close flush around the internal stack (`Y = ±0.06`), keeping the Arc Flow turbines, copper heatpipes, and logic board completely enclosed inside the chassis.
+- **1% to 65% — Layered Mechanical Separation with Live Explanations:** As the teardown slider advances, each of the 16 subsystems separates along its mechanical extraction vector (`at: [start, end]` and `spread: [dx, dy, dz]`) while a live stage banner explains the active extraction step and lists the parts emerging in that range.
+- **65% to 100% — 4 × 4 Knolling Inventory Grid ("Todas las piezas"):** Approaching `100%`, the camera interpolates to a frontal frustum plane (`fov = 36°`, `Z = 15.3884`) where the `Z = 0` plane has exact height `10.0` and width `10.0 × aspect`. All 16 3D parts smoothly rotate to face the viewer, scale to fit their cell (`sizeSpan`), and align directly above a `4 × 4` CSS grid of technical explanation cards.
 
-### Armoury Crate Telemetry HUD
-A tactical on-screen heads-up display replicates the ASUS Armoury Crate monitoring environment:
-- **Circular Fan Tachometer:** Dynamic SVG gauge computing live turbine velocity from 2,400 to 5,800 RPM.
-- **Thermal Monitors:** Calibrated gauges tracking CPU and GPU die temperatures in real time based on workload profiles.
-- **Acoustic Presets:** Direct profile selector toggleable between Silent (2,400 RPM / low dBA), Performance (3,800 RPM / balanced), and Turbo (5,800 RPM / maximum airflow).
-- **Direct Layer Navigation:** Quick-access buttons to focus and explode specific hardware subsystems with cinematic camera framing.
+### 2. 16 Modular 3D Subsystems
+Every component is modeled as an independent `THREE.Group` centered at its local `(0, 0, 0)` origin, supporting raycast selection, 3D pin projection, and single-part 3D isolation:
+1. **Chasis superior (C-Cover)** — Brushed aluminum-magnesium deck with machined recesses for the keyboard and trackpad.
+2. **Cubierta inferior (D-Cover)** — Service plate with hexagonal intake vents, rubber feet, and 12 captive Phillips screws.
+3. **Pantalla FHD 144Hz** — 15.6" IPS-level panel with Adaptive-Sync and slim bezels.
+4. **Teclado RGB Overstroke** — Full-size membrane switch matrix with translucent smoked WASD keycaps and key legends.
+5. **Trackpad de precisión** — Mylar multi-touch surface with integrated Hall-effect click sensor.
+6. **Placa base (PCB)** — 8-layer FR-4 matte-black mainboard with copper power planes and SMD components.
+7. **AMD Ryzen 9 7940HS** — Zen 4 (4nm TSMC) processor package with exposed rectangular silicon die and SMD capacitors.
+8. **NVIDIA RTX 4060** — AD107 (140W TGP + MUX Switch) graphics processor ringed by 4 GDDR6 memory packages.
+9. **Turbina Arc Flow Izq. (CPU)** — 84-blade liquid-crystal polymer centrifugal fan housing.
+10. **Turbina Arc Flow Der. (GPU)** — Dedicated 84-blade centrifugal fan for GPU and VRAM cooling.
+11. **Disipador de 5 Heatpipes** — Five sintered-copper heatpipes bridging CPU, GPU, and VRM thermal blocks to 4 fin stacks.
+12. **Memoria DDR5-4800** — Dual-channel SO-DIMM modules (2 × 16 GB) with gold edge fingers and DRAM ICs.
+13. **SSD NVMe PCIe 4.0** — M.2 2280 solid-state drive with PCIe 4.0 x4 controller, NAND packages, and copper thermal pad.
+14. **Batería 90Wh (4 celdas)** — 4S1P lithium-ion polymer pack occupying the full front palmrest bay.
+15. **Altavoces Dolby Atmos** — Dual acoustic suspension chambers with side-firing ports.
+16. **Bisagras y puertos I/O** — High-torque steel hinges alongside RJ45, HDMI 2.1, USB4, USB-C, and 3.5mm audio shields.
 
-### Viewport Shading Modes & Inspection
-- **Normal PBR:** Full physically based rendering pipeline utilizing ACES Filmic tone mapping, normal maps, roughness distributions, and calibrated TUF dual rim lights (Amber #FFB800 and Cyan #00E5FF).
-- **FLIR Thermal Vision:** Custom GLSL-equivalent heat mapping converting component surface coordinates into a high-contrast infrared thermal spectrum (ranging from deep blue ambient to white-hot silicon junction points).
-- **X-Ray Holographic:** Translucent blueprint wireframe rendering with depth write isolation and glowing cyan contours for internal structural inspection.
-- **360° Free Orbit Controls:** Instant toggle switching the camera from rigid scrollytelling pathing into unrestricted orbital rotation with inertia damping.
+### 3. Interactive Logic Board Explorer (`01` to `08`)
+Clicking **"Explorar placa base"** isolates a dedicated high-detail 3D model of the mainboard with 8 numbered hardware pins projected in real time onto the viewport:
+- `01 RYZEN 9` — Socket FP8 & Zen 4 package
+- `02 RTX 4060` — BGA GPU & 8 GB GDDR6 bank
+- `03 VRM 12+2` — Monolithic DrMOS power stages & alloy chokes
+- `04 DDR5-4800` — Dual-channel SO-DIMM slots
+- `05 NVME RAID` — Dual M.2 PCIe 4.0 x4 slots with MUX routing
+- `06 WIFI 6 + EC` — M.2 2230 wireless card & Embedded Controller
+- `07 I/O SUR` — Audio DAC, battery connector & speaker headers
+- `08 PISTAS PCB` — High-speed differential pairs & impedance-matched traces
 
-### Procedural Sound Synthesis (Web Audio API)
-Zero external audio files or network payloads. All auditory feedback is synthesized directly on the Web Audio API audio graph:
-- **Mechanical Clicks:** Dual-stage oscillator transients simulating tactile microswitch actuation on clicks and toggles.
-- **Turbine Jet Whine:** Bandpass-filtered white noise combined with sine harmonics that pitch-shift smoothly with fan RPM changes.
-- **Sub-bass Resonances:** Short sub-bass pulse waves signaling phase transitions and component inspections.
+### 4. Three Visual Themes & Full Mobile Adaptation
+- **Themes:** Instant switching between **Claro** (Editorial Studio Paper), **Oscuro** (Cyber TUF Dark), and **CAD** (Engineering Blueprint).
+- **Responsive Mobile Layout:** Dedicated slide-over parts drawer (`Piezas (16)`), adaptive 3D Knolling cell scaling for portrait screens, and docked bottom inspector cards.
 
-### Contact Shadows & Cinematic Camera Smoothing
-- **Shadow Grounding:** A multi-layered tactical pedestal featuring an engineered dark cylinder with receiveShadow, an overlay ShadowMaterial plane, and technical alignment rings to ground every detached part with realistic soft contact shadows.
-- **Framerate-Independent Damping:** Camera scroll tracking uses exponential vector damping (1 - Math.exp(-20 * dt)), eliminating micro-stutters and input lag to sustain buttery 60 FPS motion across variable refresh rates.
+## Screenshots
 
-## Architecture & Project Structure
+| Sealed Chassis (`0%`) | Layered Teardown (`50%`) |
+| :---: | :---: |
+| ![Assembled](assets/screenshots/hero_assembled.png) | ![Cooling Teardown](assets/screenshots/teardown_cooling.png) |
 
-```
-asus-tuf-a15-3d/
-├── assets/
-│   └── teardown-demo.gif         # High-resolution dual-palette teardown animation
-├── src/
-│   ├── components/
-│   │   ├── ArmouryCrateHUD.tsx   # Floating telemetry HUD, RPM gauge & thermal profiles
-│   │   ├── ComponentModal.tsx    # Technical engineering modal with deep component specs
-│   │   ├── HeaderNav.tsx         # Navigation bar with view modes and inspection toggles
-│   │   └── ScrollStorySections.tsx # Scrollytelling overlay content & phase triggers
-│   ├── data/
-│   │   └── laptopSpecs.ts        # Hardware specifications, military tolerances & specs
-│   ├── three/
-│   │   ├── LaptopModel.ts        # Parametric 3D laptop geometry, shaders & exploded groups
-│   │   ├── proceduralTextures.ts # Canvas 2D procedural generators (PCB, honeycombs, displays)
-│   │   └── SceneManager.ts       # Three.js lifecycle, ACES tone mapping, shadows & controls
-│   ├── types/
-│   │   └── laptop.ts             # TypeScript definitions for components, phases & modes
-│   ├── utils/
-│   │   └── soundEffects.ts       # Procedural Web Audio API sound synthesizer
-│   ├── App.tsx                   # Master orchestrator syncing GSAP ScrollTrigger & Three.js
-│   ├── index.css                 # Custom font imports (Rajdhani, JetBrains Mono) & styles
-│   └── main.tsx                  # React 18 bootstrap entry point
-├── index.html                    # Root HTML shell with military cyberpunk meta tags
-├── package.json                  # Dependencies & execution scripts
-├── tailwind.config.js            # Design tokens & color system
-├── tsconfig.json                 # TypeScript compiler configuration
-└── vite.config.ts                # Vite bundler configuration
-```
+| 4 × 4 Knolling Inventory (`100%`) | Logic Board Explorer (`01–08`) |
+| :---: | :---: |
+| ![Full Knolling Grid](assets/screenshots/teardown_full_exploded.png) | ![Logic Board Mode](assets/screenshots/mode_thermal.png) |
 
 ## Quick Start
 
-### Prerequisites
-- Node.js 18+ or 20+
-- npm, pnpm, or yarn
-
-### Installation
 ```bash
-# Clone the repository
 git clone https://github.com/Ismael-Sallami/asus-tuf-a15-3d.git
-
-# Navigate into project directory
 cd asus-tuf-a15-3d
-
-# Install dependencies
 npm install
-```
-
-### Development
-```bash
-# Start local Vite development server
 npm run dev
 ```
-Open `http://localhost:5173` in your browser.
 
-### Production Build
+Build for production:
+
 ```bash
-# Typecheck with tsc and compile optimized production bundles
 npm run build
-
-# Preview production build locally
 npm run preview
 ```
 
-## Hardware Specifications Referenced
-
-| Subsystem | Specification |
-| :--- | :--- |
-| **Processor** | AMD Ryzen 7 7735HS (8 Cores, 16 Threads, up to 4.75 GHz, Zen 3+) |
-| **Graphics** | NVIDIA GeForce RTX 4060 Laptop GPU (8GB GDDR6, 140W TGP with Dynamic Boost) |
-| **Cooling** | Dual 84-blade Arc Flow Fans, 4 Copper Heatpipes, 4 Exhaust Heatsinks |
-| **Memory** | 16GB / 32GB Dual-Channel DDR5-4800 SO-DIMM |
-| **Storage** | 512GB / 1TB PCIe 4.0 NVMe M.2 SSD + Secondary Empty M.2 Slot |
-| **Display** | 15.6" FHD (1920x1080) 144Hz IPS-level, G-Sync, 100% sRGB |
-| **Battery** | 90Wh 4-Cell Lithium-ion (15.4V, Fast Charging 50% in 30 mins) |
-| **Durability** | MIL-STD-810H Military Standard (Shock, Vibration, Temperature, Humidity) |
-
 ## License
-Distributed under the MIT License. See `LICENSE` for details.
-
-## Author
-**Ismael Sallami Moreno**
-- Portfolio: [https://ismael-sallami.github.io](https://ismael-sallami.github.io)
-- GitHub: [@ismael-sallami](https://github.com/ismael-sallami)
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -1,25 +1,16 @@
 import React from 'react';
+import { Play, Pause, Layers, RotateCcw } from 'lucide-react';
 import { soundManager } from '../utils/soundEffects';
 import { AppTheme } from '../types/laptop';
-import {
-  Play,
-  Pause,
-  Layers,
-  Camera,
-  MapPin
-} from 'lucide-react';
 
 interface TeardownControllerProps {
   disassemblyPercent: number;
   onPercentChange: (percent: number) => void;
   isAutoPlaying: boolean;
   onToggleAutoPlay: () => void;
-  activeCameraPreset: string;
+  activeCameraPreset: 'perspective' | 'top' | 'cooling' | 'front' | 'bottom';
   onSelectCameraPreset: (preset: 'perspective' | 'top' | 'cooling' | 'front' | 'bottom') => void;
-  activeCategory: string | null;
-  onSelectCategory: (category: string | null) => void;
-  showHotspots: boolean;
-  onToggleHotspots: () => void;
+  onResetCamera: () => void;
   theme?: AppTheme;
 }
 
@@ -30,29 +21,17 @@ export const TeardownController: React.FC<TeardownControllerProps> = ({
   onToggleAutoPlay,
   activeCameraPreset,
   onSelectCameraPreset,
-  activeCategory,
-  onSelectCategory,
-  showHotspots,
-  onToggleHotspots,
-  theme = 'cyber'
+  onResetCamera,
+  theme = 'cyber',
 }) => {
   const isLight = theme === 'studio';
-  const isBlueprint = theme === 'blueprint';
 
-  const cameraPresets = [
-    { id: 'perspective', label: 'Perspectiva' },
-    { id: 'top', label: 'Cenital' },
-    { id: 'cooling', label: 'Refrigeración' },
-    { id: 'front', label: 'Frontal' },
-    { id: 'bottom', label: 'Chasis' }
-  ];
-
-  const layerCategories = [
-    { id: null, label: 'Todas' },
-    { id: 'cooling', label: 'Refrigeración' },
-    { id: 'motherboard', label: 'Silicio & Placa' },
-    { id: 'battery', label: 'Batería 90Wh' },
-    { id: 'chassis', label: 'Chasis Base' }
+  const cameraPresets: Array<{ id: 'perspective' | 'top' | 'cooling' | 'front' | 'bottom'; label: string }> = [
+    { id: 'perspective', label: 'Perspective' },
+    { id: 'top', label: 'Top' },
+    { id: 'front', label: 'Front' },
+    { id: 'bottom', label: 'Bottom' },
+    { id: 'cooling', label: 'Cooling' },
   ];
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,161 +44,122 @@ export const TeardownController: React.FC<TeardownControllerProps> = ({
   };
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[94vw] max-w-3xl pointer-events-auto transition-all duration-300">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[92vw] max-w-2xl pointer-events-auto flex flex-col items-center gap-3 select-none">
+      {/* Floating Camera Presets Pill */}
       <div
-        className={`backdrop-blur-xl border rounded-2xl p-3 md:p-4 shadow-2xl transition-colors duration-300 ${
+        className={`flex items-center gap-1 rounded-full border px-2 py-1 text-xs backdrop-blur-xl shadow-lg transition-colors ${
           isLight
-            ? 'bg-white/95 border-slate-200/90 text-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.12)]'
-            : isBlueprint
-            ? 'bg-[#07152B]/95 border-[#00E5FF]/30 text-slate-100 shadow-[0_20px_50px_rgba(0,229,255,0.15)]'
-            : 'bg-[#0B0E14]/90 border-[#232B3B] text-slate-200 shadow-[0_12px_40px_rgba(0,0,0,0.65)]'
+            ? 'bg-white/80 border-slate-200 text-slate-600'
+            : 'bg-black/70 border-white/10 text-slate-300'
         }`}
       >
-        {/* Barra superior de Presets y Filtros */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-black/10 dark:border-white/10">
-          {/* Ángulos de Cámara estilo Inside MacBook */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
-            <span
-              className={`text-[10px] font-['Orbitron'] font-bold flex items-center gap-1 shrink-0 mr-1 ${
-                isLight ? 'text-slate-500' : 'text-slate-400'
+        {cameraPresets.map((preset) => {
+          const isActive = activeCameraPreset === preset.id;
+          return (
+            <button
+              key={preset.id}
+              onClick={() => {
+                soundManager.playLayerSwitch();
+                onSelectCameraPreset(preset.id);
+              }}
+              className={`rounded-full px-3 py-1 font-medium text-xs transition-all ${
+                isActive
+                  ? isLight
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-white/20 text-white shadow-sm'
+                  : 'hover:text-ivory opacity-70 hover:opacity-100'
               }`}
             >
-              <Camera className="w-3 h-3 text-[#FFB800]" />
-              <span className="hidden sm:inline">VISTA:</span>
-            </span>
-            {cameraPresets.map((preset) => {
-              const isActive = activeCameraPreset === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  onClick={() => {
-                    soundManager.playLayerSwitch();
-                    onSelectCameraPreset(preset.id as any);
-                  }}
-                  className={`text-[11px] font-['Rajdhani'] font-bold px-2.5 py-1 rounded-md transition-all shrink-0 ${
-                    isActive
-                      ? 'bg-[#FFB800] text-black shadow-[0_0_10px_rgba(255,184,0,0.35)]'
-                      : isLight
-                      ? 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                      : 'bg-[#121721] text-slate-400 hover:text-white hover:bg-[#1A2230]'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
+              {preset.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Main Teardown Controller Card (Inside MacBook style) */}
+      <div
+        className={`w-full rounded-2xl border p-4 backdrop-blur-2xl shadow-2xl transition-all duration-300 ${
+          isLight
+            ? 'bg-white/90 border-slate-200/90 text-slate-800 shadow-[0_16px_40px_rgba(0,0,0,0.08)]'
+            : 'bg-black/85 border-white/10 text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.6)]'
+        }`}
+      >
+        <div className="flex items-center gap-4">
+          {/* Left Icon + Title */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+                isLight ? 'border-slate-200 bg-slate-100 text-slate-700' : 'border-white/10 bg-white/5 text-slate-200'
+              }`}
+            >
+              <Layers size={18} />
+            </div>
+            <div className="hidden sm:block">
+              <h3 className="text-xs font-semibold tracking-tight">Take it apart</h3>
+              <p className="text-[11px] opacity-50">One layer at a time.</p>
+            </div>
           </div>
 
-          {/* Toggle de Marcadores 3D */}
-          <button
-            onClick={() => {
-              soundManager.playMechanicalClick();
-              onToggleHotspots();
-            }}
-            className={`flex items-center gap-1.5 text-[11px] font-['Rajdhani'] font-bold px-2.5 py-1 rounded-md border transition-all shrink-0 ${
-              showHotspots
-                ? isLight
-                  ? 'bg-blue-50 border-blue-300 text-blue-700 shadow-sm'
-                  : 'bg-[#00E5FF]/15 border-[#00E5FF] text-[#00E5FF] shadow-[0_0_10px_rgba(0,229,255,0.25)]'
-                : isLight
-                ? 'bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-800'
-                : 'bg-[#121721] border-[#20293A] text-slate-400 hover:text-slate-200'
-            }`}
-            title="Mostrar u ocultar puntos de anclaje técnicos en 3D"
-          >
-            <MapPin className="w-3 h-3" />
-            <span>Marcadores 3D</span>
-          </button>
-        </div>
-
-        {/* Fila del Control Deslizante de Despiece (Take it Apart) */}
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          {/* Botón de Autoplay / Walkthrough 20s */}
-          <button
-            onClick={() => {
-              soundManager.playMechanicalClick();
-              onToggleAutoPlay();
-            }}
-            className={`flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-['Orbitron'] font-black uppercase tracking-wider transition-all shrink-0 w-full sm:w-auto shadow-lg ${
-              isAutoPlaying
-                ? 'bg-[#FF4500] text-white animate-pulse shadow-[0_0_15px_rgba(255,69,0,0.4)]'
-                : 'bg-gradient-to-r from-[#FFB800] to-[#FFA000] text-black hover:brightness-110 shadow-[0_0_15px_rgba(255,184,0,0.3)]'
-            }`}
-          >
-            {isAutoPlaying ? (
-              <>
-                <Pause className="w-3.5 h-3.5 fill-current" />
-                <span>Pausar</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Despiece 20s</span>
-              </>
-            )}
-          </button>
-
-          {/* Barra deslizante continua */}
-          <div className="flex-1 w-full flex flex-col justify-center">
-            <div
-              className={`flex items-center justify-between text-[10px] font-['JetBrains_Mono'] mb-1 ${
-                isLight ? 'text-slate-500' : 'text-slate-400'
-              }`}
-            >
-              <span>ENSAMBLADO (0%)</span>
-              <span className="text-[#FFB800] font-bold text-xs font-['Orbitron']">
-                {disassemblyPercent}% DESPIECE
-              </span>
-              <span>DESACOPLADO (100%)</span>
+          {/* Center: Clean Range Slider */}
+          <div className="flex-1 px-2">
+            <div className="flex items-center justify-between text-[11px] font-mono opacity-60 mb-1.5">
+              <span>Assembled</span>
+              <span className="font-semibold opacity-100">{disassemblyPercent}%</span>
+              <span>All parts ↗</span>
             </div>
+
             <div className="relative flex items-center">
               <input
                 type="range"
                 min="0"
                 max="100"
+                step="1"
                 value={disassemblyPercent}
                 onChange={handleSliderChange}
-                className={`w-full h-2 rounded-lg appearance-none cursor-pointer accent-[#FFB800] border focus:outline-none focus:ring-1 focus:ring-[#FFB800] ${
-                  isLight
-                    ? 'bg-slate-200 border-slate-300'
-                    : 'bg-[#141A24] border-[#252E3E]'
-                }`}
+                className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-slate-300 dark:bg-white/20 accent-accent"
               />
             </div>
-          </div>
-        </div>
 
-        {/* Aislamiento de capas (Subsystem Filter) */}
-        <div className="hidden md:flex items-center gap-1.5 mt-2.5 pt-2 border-t border-black/10 dark:border-white/10">
-          <span
-            className={`text-[10px] font-['Orbitron'] font-bold flex items-center gap-1 shrink-0 mr-1 ${
-              isLight ? 'text-slate-500' : 'text-slate-400'
-            }`}
-          >
-            <Layers className="w-3 h-3 text-[#00E5FF]" />
-            <span>AISLAR CAPA:</span>
-          </span>
-          {layerCategories.map((cat) => {
-            const isActive = activeCategory === cat.id;
-            return (
-              <button
-                key={cat.label}
-                onClick={() => {
-                  soundManager.playLayerSwitch();
-                  onSelectCategory(cat.id);
-                }}
-                className={`text-[10px] font-['Rajdhani'] font-bold px-2 py-0.5 rounded transition-all ${
-                  isActive
-                    ? 'bg-[#00E5FF] text-black shadow-[0_0_8px_rgba(0,229,255,0.4)]'
-                    : isLight
-                    ? 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                    : 'bg-[#10151E] text-slate-400 hover:text-slate-200 hover:bg-[#18202C]'
-                }`}
-              >
-                {cat.label}
-              </button>
-            );
-          })}
+            {/* Subtle tick marks */}
+            <div className="flex justify-between px-1 mt-1 opacity-20">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <span key={i} className="h-1 w-[1px] bg-current" />
+              ))}
+            </div>
+          </div>
+
+          {/* Right Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={onToggleAutoPlay}
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
+                isAutoPlaying
+                  ? isLight
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-accent bg-accent text-black'
+                  : isLight
+                  ? 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                  : 'border-white/10 bg-white/5 hover:bg-white/10 text-slate-200'
+              }`}
+              title={isAutoPlaying ? 'Pause teardown' : 'Play teardown'}
+              aria-label={isAutoPlaying ? 'Pause teardown' : 'Play teardown'}
+            >
+              {isAutoPlaying ? <Pause size={15} /> : <Play size={15} className="ml-0.5" />}
+            </button>
+
+            <button
+              onClick={onResetCamera}
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
+                isLight
+                  ? 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                  : 'border-white/10 bg-white/5 hover:bg-white/10 text-slate-200'
+              }`}
+              title="Reset camera view"
+              aria-label="Reset camera view"
+            >
+              <RotateCcw size={15} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

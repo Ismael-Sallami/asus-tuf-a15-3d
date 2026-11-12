@@ -1,24 +1,20 @@
 import React, { useEffect } from 'react';
-import { ComponentDetail } from '../types/laptop';
+import { ComponentDetail, AppTheme } from '../types/laptop';
 import { soundManager } from '../utils/soundEffects';
-import {
-  X,
-  Crosshair,
-  Cpu,
-  CheckCircle2,
-  SlidersHorizontal
-} from 'lucide-react';
+import { X, Crosshair } from 'lucide-react';
 
 interface ComponentModalProps {
   component: ComponentDetail | null;
   onClose: () => void;
   onFocusCamera: (componentId: string) => void;
+  theme?: AppTheme;
 }
 
 export const ComponentModal: React.FC<ComponentModalProps> = ({
   component,
   onClose,
-  onFocusCamera
+  onFocusCamera,
+  theme = 'cyber',
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -33,6 +29,8 @@ export const ComponentModal: React.FC<ComponentModalProps> = ({
 
   if (!component) return null;
 
+  const isLight = theme === 'studio';
+
   const handleClose = () => {
     soundManager.playMechanicalClick();
     onClose();
@@ -40,127 +38,79 @@ export const ComponentModal: React.FC<ComponentModalProps> = ({
 
   const handleFocus = () => {
     soundManager.playMechanicalClick();
-    soundManager.playFuturisticHum();
     onFocusCamera(component.id);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-      {/* Caja modal con corte militar y halo sutil */}
-      <div className="relative w-full max-w-2xl bg-[#0E131C] border border-[#2A3446] cut-corner-br shadow-[0_0_40px_rgba(0,0,0,0.8)] text-slate-200 overflow-hidden">
-        {/* Franja superior con acento de color del componente */}
-        <div
-          className="h-1.5 w-full"
-          style={{ backgroundColor: component.highlightColor || '#FFB800' }}
-        />
-
-        {/* Cabecera militar */}
-        <div className="p-5 border-b border-[#1E2738] flex items-start justify-between bg-[#121824]">
-          <div className="flex items-start space-x-3">
-            <div
-              className="p-2.5 rounded border mt-0.5"
-              style={{
-                borderColor: `${component.highlightColor || '#FFB800'}44`,
-                backgroundColor: `${component.highlightColor || '#FFB800'}15`
-              }}
-            >
-              <Cpu className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-['JetBrains_Mono'] tracking-widest text-slate-400 uppercase bg-[#0B0E14] px-2 py-0.5 rounded border border-[#252F42]">
-                  SPEC-ID // {component.id.toUpperCase()}
-                </span>
-                <span
-                  className="text-[10px] font-['JetBrains_Mono'] font-bold px-2 py-0.5 rounded uppercase"
-                  style={{
-                    color: component.highlightColor || '#FFB800',
-                    backgroundColor: `${component.highlightColor || '#FFB800'}22`
-                  }}
-                >
-                  {component.category}
-                </span>
-              </div>
-              <h2 className="text-xl font-['Orbitron'] font-black text-white mt-1">
-                {component.name}
-              </h2>
-              <p className="text-xs font-['Rajdhani'] font-semibold text-slate-400 tracking-wider">
-                {component.subtitle}
-              </p>
-            </div>
+    <aside
+      className={`fixed top-20 right-6 z-40 w-84 max-w-[90vw] rounded-2xl border p-5 backdrop-blur-2xl shadow-2xl transition-all duration-300 font-sans select-none animate-fadeIn ${
+        isLight
+          ? 'bg-white/95 border-slate-200 text-slate-800 shadow-[0_16px_40px_rgba(0,0,0,0.08)]'
+          : 'bg-black/90 border-white/10 text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.6)]'
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 pb-3 border-b border-inherit">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: component.highlightColor || '#4ade80' }}
+            />
+            <span className="text-[10px] font-mono uppercase tracking-wider opacity-60">
+              {component.category}
+            </span>
           </div>
-
-          <button
-            onClick={handleClose}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1A2234] border border-transparent hover:border-[#2E3B50] transition-colors"
-            title="Cerrar ventana [ESC]"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <h3 className="font-semibold text-sm sm:text-base tracking-tight truncate">
+            {component.name}
+          </h3>
         </div>
 
-        {/* Cuerpo del contenido */}
-        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
-          {/* Título de sección y descripción */}
-          <div>
-            <h3 className="text-sm font-['Orbitron'] font-bold text-white mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 bg-[#FFB800]" />
-              {component.title}
-            </h3>
-            <p className="text-sm font-['Rajdhani'] text-slate-300 leading-relaxed text-justify">
-              {component.description}
-            </p>
-          </div>
-
-          {/* Matriz técnica de especificaciones */}
-          <div>
-            <h4 className="text-xs font-['JetBrains_Mono'] text-slate-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-[#00E5FF]" /> Parámetros y Tolerancias Técnicas
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-[#0B0E14] p-3 rounded border border-[#1C2433]">
-              {component.specs.map((spec, index) => (
-                <div
-                  key={index}
-                  className="flex flex-col p-2 bg-[#121824] rounded border border-[#1A2232]"
-                >
-                  <span className="text-[11px] font-['JetBrains_Mono'] text-slate-400">
-                    {spec.label}
-                  </span>
-                  <span className="text-xs font-['Rajdhani'] font-bold text-white mt-0.5">
-                    {spec.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Sello de conformidad de grado militar */}
-          <div className="bg-[#121A28] border border-[#1E2E44] p-3 rounded flex items-center space-x-3 text-xs">
-            <CheckCircle2 className="w-5 h-5 text-[#FFB800] shrink-0" />
-            <p className="text-slate-300 font-['Rajdhani']">
-              Componente verificado bajo las normas de resistencia mecánica y térmica <span className="text-white font-bold">MIL-STD-810H</span> (resistencia a vibraciones balísticas, impactos y temperaturas extremas de -32°C a 49°C).
-            </p>
-          </div>
-        </div>
-
-        {/* Barra inferior de acciones */}
-        <div className="p-4 bg-[#121824] border-t border-[#1E2738] flex items-center justify-between">
-          <button
-            onClick={handleFocus}
-            className="flex items-center space-x-2 px-4 py-2 bg-[#FFB800] hover:bg-[#FFA500] text-black font-['Rajdhani'] font-bold text-xs rounded transition-colors shadow-[0_0_15px_rgba(255,184,0,0.3)]"
-          >
-            <Crosshair className="w-4 h-4" />
-            <span>ENFOCAR VISTA 3D</span>
-          </button>
-
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 bg-[#1A2234] hover:bg-[#222E46] text-slate-300 font-['Rajdhani'] font-semibold text-xs rounded border border-[#2E3C54] transition-colors"
-          >
-            Cerrar ficha
-          </button>
-        </div>
+        <button
+          onClick={handleClose}
+          className="flex h-7 w-7 items-center justify-center rounded-lg border border-inherit opacity-60 hover:opacity-100 transition-opacity"
+          aria-label="Close component details"
+        >
+          <X size={15} />
+        </button>
       </div>
-    </div>
+
+      {/* Description */}
+      <p className="mt-3 text-xs leading-relaxed opacity-75">
+        {component.description}
+      </p>
+
+      {/* Key Specifications */}
+      {component.specs && component.specs.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-inherit space-y-2">
+          <div className="text-[10px] font-mono uppercase tracking-wider opacity-50 mb-1">
+            Technical Specifications
+          </div>
+          <div className="space-y-1.5">
+            {component.specs.map((s, idx) => (
+              <div key={idx} className="flex items-center justify-between text-xs">
+                <span className="opacity-60">{s.label}</span>
+                <span className="font-mono text-[11px] font-medium opacity-90">{s.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Focus Camera Button */}
+      <div className="mt-5 pt-3 border-t border-inherit">
+        <button
+          onClick={handleFocus}
+          className={`w-full flex items-center justify-center gap-2 rounded-xl py-2 px-3 text-xs font-medium border transition-colors ${
+            isLight
+              ? 'border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-800'
+              : 'border-white/10 bg-white/5 hover:bg-white/10 text-slate-100'
+          }`}
+        >
+          <Crosshair size={14} className="opacity-70" />
+          <span>Focus 3D camera on this part</span>
+        </button>
+      </div>
+    </aside>
   );
 };

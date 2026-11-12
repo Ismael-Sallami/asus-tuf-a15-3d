@@ -973,46 +973,95 @@ export class LaptopModel {
   /**
    * Separa suavemente las capas del portátil en función del progreso de desmontaje (0 a 1)
    */
+  /**
+   * Actualiza el factor de explosión (0 a 1) desacoplando capas a lo largo del eje vertical Y
+   * siguiendo el estándar de despiece limpio y sobrio de ingeniería de Inside MacBook.
+   */
   public setExplodedProgress(t: number): void {
     const clampedT = Math.max(0, Math.min(1, t));
 
-    // Capa 1: Chasis inferior D-Cover desciende verticalmente
-    this.dCoverGroup.position.y = -0.2 - clampedT * 3.8;
-    this.dCoverGroup.position.z = clampedT * 0.6;
+    // Capa 1: Chasis inferior D-Cover desciende limpiamente por el eje vertical
+    this.dCoverGroup.position.y = -0.2 - clampedT * 4.6;
+    this.dCoverGroup.position.z = 0;
+    this.dCoverGroup.position.x = 0;
+    this.dCoverGroup.rotation.set(0, 0, 0);
 
-    // Capa 2: Batería y altavoces se desacoplan hacia adelante y abajo
-    this.batteryGroup.position.y = 0.05 - clampedT * 2.2;
-    this.batteryGroup.position.z = clampedT * 2.8;
+    // Capa 2: Batería y altavoces descienden verticalmente
+    this.batteryGroup.position.y = 0.05 - clampedT * 2.4;
+    this.batteryGroup.position.z = 0;
+    this.batteryGroup.position.x = 0;
 
-    this.speakersGroup.position.y = 0.05 - clampedT * 2.0;
-    this.speakersGroup.position.z = clampedT * 2.5;
+    this.speakersGroup.position.y = 0.05 - clampedT * 2.2;
+    this.speakersGroup.position.z = 0;
+    this.speakersGroup.position.x = 0;
 
-    // Capa 3: Placa base se mantiene como núcleo de referencia espacial
-    this.motherboardGroup.position.y = 0.12;
+    // Capa 3: Placa base se mantiene como el datum / plano neutro de referencia
+    this.motherboardGroup.position.set(0, 0.12, 0);
 
-    // Capa 4: Módulos RAM SO-DIMM se desacoplan flotando y rotando a 25 grados
-    this.ramModulesGroup.position.y = clampedT * 1.8;
-    this.ramModulesGroup.position.z = clampedT * 1.2;
-    this.ramModulesGroup.rotation.x = clampedT * 0.45; // Ángulo de inserción SO-DIMM
+    // Capa 4: Módulos RAM SO-DIMM se elevan verticalmente paralelos a la placa
+    this.ramModulesGroup.position.y = 0.12 + clampedT * 1.6;
+    this.ramModulesGroup.position.x = 0;
+    this.ramModulesGroup.position.z = 0;
+    this.ramModulesGroup.rotation.set(0, 0, 0);
 
-    // Capa 5: Módulo SSD y Wi-Fi se elevan en diagonal
-    this.ssdGroup.position.y = clampedT * 2.1;
-    this.ssdGroup.position.x = -clampedT * 1.0;
-    this.wifiCardGroup.position.y = clampedT * 1.9;
+    // Capa 5: Módulo SSD y tarjeta Wi-Fi se elevan verticalmente
+    this.ssdGroup.position.y = 0.12 + clampedT * 1.8;
+    this.ssdGroup.position.x = 0;
+    this.ssdGroup.position.z = 0;
+    this.wifiCardGroup.position.y = 0.12 + clampedT * 1.7;
 
-    // Capa 6: Sistema de refrigeración Arc Flow se eleva
-    this.coolingGroup.position.y = 0.05 + clampedT * 3.2;
-    this.coolingGroup.position.z = -clampedT * 1.2;
+    // Capa 6: Sistema de refrigeración Arc Flow se eleva verticalmente sobre el silicio
+    this.coolingGroup.position.y = 0.15 + clampedT * 3.4;
+    this.coolingGroup.position.x = 0;
+    this.coolingGroup.position.z = 0;
 
-    // Capa 7: Chasis superior C-Cover y teclado ascienden
-    this.cCoverGroup.position.y = 0.35 + clampedT * 4.6;
-    this.cCoverGroup.position.z = clampedT * 0.4;
+    // Capa 7: Chasis superior C-Cover y teclado se elevan verticalmente
+    this.cCoverGroup.position.y = 0.35 + clampedT * 5.2;
+    this.cCoverGroup.position.x = 0;
+    this.cCoverGroup.position.z = 0;
 
-    // Capa 8: Pantalla se abre completamente y se separa del chasis
-    // En fase 0 está abierta 115 grados (0.35 rad sobre eje horizontal), al desmontar se desacopla hacia arriba y atrás
-    this.screenGroup.position.y = 0.45 + clampedT * 6.2;
-    this.screenGroup.position.z = -4.6 - clampedT * 3.4;
-    this.screenGroup.rotation.x = 0.35 + clampedT * 0.6;
+    // Capa 8: Pantalla se eleva a lo largo de la vertical manteniendo su ángulo natural de apertura
+    this.screenGroup.position.y = 0.45 + clampedT * 7.2;
+    this.screenGroup.position.z = -4.6;
+    this.screenGroup.position.x = 0;
+    this.screenGroup.rotation.x = 0.35; // Ángulo constante natural de 110 grados
+
+    this.hingesGroup.position.y = 0.45 + clampedT * 7.2;
+    this.hingesGroup.position.z = -4.6;
+
+    // Ocultar partículas de flujo de aire en desmontaje para que no ensucien la inspección limpia
+    if (this.airflowParticles) {
+      this.airflowParticles.visible = clampedT < 0.05 || this.currentViewMode === 'thermal';
+    }
+  }
+
+  /**
+   * Conmuta la visibilidad de los subsistemas mayores de la máquina (estilo Inside MacBook)
+   */
+  public setSystemVisibility(system: 'enclosure' | 'cooling' | 'computing' | 'power' | 'display', visible: boolean): void {
+    switch (system) {
+      case 'enclosure':
+        this.dCoverGroup.visible = visible;
+        this.cCoverGroup.visible = visible;
+        break;
+      case 'cooling':
+        this.coolingGroup.visible = visible;
+        break;
+      case 'computing':
+        this.motherboardGroup.visible = visible;
+        this.ramModulesGroup.visible = visible;
+        this.ssdGroup.visible = visible;
+        this.wifiCardGroup.visible = visible;
+        break;
+      case 'power':
+        this.batteryGroup.visible = visible;
+        this.speakersGroup.visible = visible;
+        break;
+      case 'display':
+        this.screenGroup.visible = visible;
+        this.hingesGroup.visible = visible;
+        break;
+    }
   }
 
   /**

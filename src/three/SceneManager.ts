@@ -489,6 +489,13 @@ export class SceneManager {
   }
 
   /**
+   * Conmuta la visibilidad de los subsistemas mayores (estilo Inside MacBook)
+   */
+  public setSystemVisibility(system: 'enclosure' | 'cooling' | 'computing' | 'power' | 'display', visible: boolean): void {
+    this.laptop.setSystemVisibility(system, visible);
+  }
+
+  /**
    * Aísla un subsistema específico (ej. refrigeración o silicio) aplicando efecto translúcido
    */
   public isolateCategory(category: string | null): void {

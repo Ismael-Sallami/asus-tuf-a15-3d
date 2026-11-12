@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { soundManager } from '../utils/soundEffects';
 import { ArrowUpRight } from 'lucide-react';
+import { soundManager } from '../utils/soundEffects';
+import { AppTheme } from '../types/laptop';
 
 export interface HotspotData {
   x: number;
@@ -16,45 +17,35 @@ export interface HotspotData {
 interface HotspotsOverlayProps {
   hotspots: Record<string, HotspotData>;
   isVisible: boolean;
+  disassemblyPercent: number;
   onSelectComponent: (componentId: string) => void;
   activeComponentId: string | null;
-  currentPhaseTarget?: string;
-  activeCategory?: string | null;
+  theme?: AppTheme;
 }
 
 export const HotspotsOverlay: React.FC<HotspotsOverlayProps> = ({
   hotspots,
   isVisible,
+  disassemblyPercent,
   onSelectComponent,
   activeComponentId,
-  currentPhaseTarget,
-  activeCategory
+  theme = 'cyber',
 }) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  if (!isVisible) return null;
+  // Ocultar marcadores cuando la máquina está ensamblada (percent < 10) para evitar saturación sobre el teclado
+  if (!isVisible || disassemblyPercent < 10) return null;
+
+  const isLight = theme === 'studio';
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-20 overflow-hidden">
+    <div className="fixed inset-0 pointer-events-none z-20 overflow-hidden select-none">
       {Object.entries(hotspots).map(([id, data]) => {
         if (!data.visible) return null;
 
-        const isPhaseActive = currentPhaseTarget === data.targetId || currentPhaseTarget === id;
         const isSelected = activeComponentId === data.targetId;
         const isHovered = hoveredId === id;
-        const isCategoryMatch = Boolean(
-          activeCategory &&
-          (activeCategory === id || activeCategory === data.targetId ||
-            (activeCategory === 'motherboard' && ['cpu', 'gpu', 'ram', 'ssd'].includes(id)))
-        );
-
-        // La tarjeta se expande si está seleccionada, en hover, si coincide con la fase activa o si la categoría está aislada
-        const showCard = isHovered || isSelected || isPhaseActive || isCategoryMatch;
-
-        // Determinar si la tarjeta flota hacia la derecha o izquierda según la posición X
-        const isRight = data.x < window.innerWidth / 2;
-        const cardOffsetX = isRight ? 28 : -200;
-        const cardOffsetY = -40;
+        const showTag = isHovered || isSelected;
 
         return (
           <div
@@ -62,10 +53,10 @@ export const HotspotsOverlay: React.FC<HotspotsOverlayProps> = ({
             className="absolute transition-transform duration-75 ease-out"
             style={{
               left: `${data.x}px`,
-              top: `${data.y}px`
+              top: `${data.y}px`,
             }}
           >
-            {/* Punto de anclaje 3D interactivo con radar ping */}
+            {/* Minimal Apple-style Anchor Pin */}
             <div
               className="relative -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-auto cursor-pointer p-2"
               onMouseEnter={() => {
@@ -75,75 +66,38 @@ export const HotspotsOverlay: React.FC<HotspotsOverlayProps> = ({
               onMouseLeave={() => setHoveredId(null)}
               onClick={() => {
                 soundManager.playMechanicalClick();
-                soundManager.playFuturisticHum();
                 onSelectComponent(data.targetId);
               }}
-              title={`Clic para inspeccionar ${data.name}`}
+              title={data.name}
             >
-              <span className={`absolute w-7 h-7 rounded-full bg-[#00E5FF]/20 ${showCard ? 'animate-ping' : ''}`} />
               <span
-                className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-300 ${
-                  showCard
-                    ? 'bg-[#FFB800] border-white scale-125 shadow-[0_0_14px_#FFB800]'
-                    : 'bg-[#00E5FF] border-[#080A0D] shadow-[0_0_8px_#00E5FF] hover:scale-125'
+                className={`w-3 h-3 rounded-full border transition-all duration-300 ${
+                  showTag
+                    ? isLight
+                      ? 'bg-slate-900 border-white scale-125 shadow-[0_0_10px_rgba(0,0,0,0.3)]'
+                      : 'bg-accent border-white scale-125 shadow-[0_0_12px_rgba(74,222,128,0.5)]'
+                    : isLight
+                    ? 'bg-white/90 border-slate-700/60 shadow-sm hover:scale-125'
+                    : 'bg-black/80 border-white/60 shadow-sm hover:scale-125'
                 }`}
               />
             </div>
 
-            {/* Línea conectora SVG animada */}
-            {showCard && (
-              <svg
-                className="absolute pointer-events-none overflow-visible"
-                style={{
-                  left: 0,
-                  top: 0
-                }}
-              >
-                <line
-                  x1="0"
-                  y1="0"
-                  x2={cardOffsetX > 0 ? cardOffsetX : cardOffsetX + 180}
-                  y2={cardOffsetY + 18}
-                  stroke={isSelected || isPhaseActive ? '#FFB800' : 'rgba(0, 229, 255, 0.65)'}
-                  strokeWidth="1.2"
-                  strokeDasharray="3 3"
-                />
-              </svg>
-            )}
-
-            {/* Tarjeta flotante glassmorphic con micro-datos de ingeniería */}
-            {showCard && (
+            {/* Clean Frosted Tag on Hover or Selection */}
+            {showTag && (
               <div
-                className={`absolute pointer-events-auto rounded-lg border backdrop-blur-md p-2.5 transition-all duration-200 shadow-2xl w-48 ${
-                  isSelected || isPhaseActive
-                    ? 'bg-[#141B26]/95 border-[#FFB800] shadow-[0_0_20px_rgba(255,184,0,0.3)] scale-105'
-                    : 'bg-[#0A0E17]/90 border-[#212C3D] hover:border-[#00E5FF] hover:bg-[#0E1522]/95'
+                className={`absolute left-4 -top-3 pointer-events-auto cursor-pointer rounded-xl border px-3 py-2 text-xs shadow-xl backdrop-blur-xl transition-all duration-200 z-30 min-w-[160px] ${
+                  isLight
+                    ? 'bg-white/95 border-slate-200 text-slate-800 shadow-[0_10px_30px_rgba(0,0,0,0.08)]'
+                    : 'bg-black/90 border-white/15 text-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.6)]'
                 }`}
-                style={{
-                  left: `${cardOffsetX}px`,
-                  top: `${cardOffsetY}px`
-                }}
-                onClick={() => {
-                  soundManager.playMechanicalClick();
-                  soundManager.playFuturisticHum();
-                  onSelectComponent(data.targetId);
-                }}
+                onClick={() => onSelectComponent(data.targetId)}
               >
-                <div className="flex items-center justify-between gap-1 mb-1 border-b border-white/10 pb-1">
-                  <span className="text-[9px] font-['JetBrains_Mono'] text-[#00E5FF] font-bold tracking-wider truncate">
-                    {data.code}
-                  </span>
-                  <ArrowUpRight className="w-3 h-3 text-slate-400 shrink-0" />
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-semibold text-xs truncate">{data.name}</span>
+                  <ArrowUpRight size={13} className="shrink-0 opacity-40" />
                 </div>
-                <h4 className="text-xs font-['Orbitron'] font-bold text-white leading-tight mb-1 truncate">
-                  {data.name}
-                </h4>
-                <div className="flex items-center justify-between text-[10px] font-['Rajdhani'] text-slate-300">
-                  <span className="text-slate-400 truncate">{data.badge}</span>
-                  <span className="font-bold text-[#FFB800] shrink-0 font-['JetBrains_Mono']">
-                    {data.metric}
-                  </span>
-                </div>
+                <div className="text-[11px] opacity-60 mt-0.5">{data.badge}</div>
               </div>
             )}
           </div>

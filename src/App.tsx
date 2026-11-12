@@ -1,52 +1,52 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 import { SceneManager } from './three/SceneManager';
 import { HeaderNav } from './components/HeaderNav';
-import { ArmouryCrateHUD } from './components/ArmouryCrateHUD';
+import { AssemblyExplorer } from './components/AssemblyExplorer';
 import { ComponentModal } from './components/ComponentModal';
-import { ScrollStorySections } from './components/ScrollStorySections';
+import { SpecsModal } from './components/SpecsModal';
 import { HotspotsOverlay, HotspotData } from './components/HotspotsOverlay';
 import { TeardownController } from './components/TeardownController';
 
 import { ViewMode, ComponentDetail, AppTheme } from './types/laptop';
-import { COMPONENT_DETAILS, DISASSEMBLY_PHASES } from './data/laptopSpecs';
+import { COMPONENT_DETAILS } from './data/laptopSpecs';
 import { soundManager } from './utils/soundEffects';
-
-gsap.registerPlugin(ScrollTrigger);
 
 export const App: React.FC = () => {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
 
-  // Estados de visualización y control
+  // Estados visuales y de control
   const [viewMode, setViewMode] = useState<ViewMode>('normal');
-  const [theme, setTheme] = useState<AppTheme>('cyber');
-  const [isInspecting, setIsInspecting] = useState<boolean>(false);
+  const [theme, setTheme] = useState<AppTheme>('studio'); // Inicia en Studio Light (estilo Inside MacBook)
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [selectedComponent, setSelectedComponent] = useState<ComponentDetail | null>(null);
+  const [isSpecsOpen, setIsSpecsOpen] = useState<boolean>(false);
 
-  // Telemetría en vivo
-  const [currentPhaseIndex, setCurrentPhaseIndex] = useState<number>(0);
+  // Despiece 0% a 100%
   const [disassemblyPercent, setDisassemblyPercent] = useState<number>(0);
-  const [cpuTemp, setCpuTemp] = useState<number>(48);
-  const [gpuTemp, setGpuTemp] = useState<number>(44);
-  const [fanRPM, setFanRPM] = useState<number>(2400);
-
-  // Estados para Hotspots 3D y Controles de Estudio estilo Inside MacBook
-  const [hotspots, setHotspots] = useState<Record<string, HotspotData>>({});
-  const [showHotspots, setShowHotspots] = useState<boolean>(true);
-  const [activeCameraPreset, setActiveCameraPreset] = useState<'perspective' | 'top' | 'cooling' | 'front' | 'bottom'>('perspective');
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
   const autoPlayTweenRef = useRef<gsap.core.Tween | null>(null);
 
-  // Bucle de proyección 3D a 2D para las tarjetas flotantes de hotspots
+  // Hotspots 3D y vista de cámara
+  const [hotspots, setHotspots] = useState<Record<string, HotspotData>>({});
+  const [activeCameraPreset, setActiveCameraPreset] = useState<'perspective' | 'top' | 'cooling' | 'front' | 'bottom'>('perspective');
+
+  // Visibilidad por sistema mayor
+  const [systemVisibility, setSystemVisibility] = useState<Record<string, boolean>>({
+    enclosure: true,
+    cooling: true,
+    computing: true,
+    power: true,
+    display: true,
+  });
+
+  // Bucle de proyección 3D a 2D para hotspots
   useEffect(() => {
     let animId: number;
     const updateHotspotsLoop = () => {
-      if (sceneManagerRef.current && showHotspots) {
+      if (sceneManagerRef.current && disassemblyPercent >= 10) {
         const coords = sceneManagerRef.current.getHotspotsScreenPositions();
         setHotspots(coords);
       }
@@ -54,189 +54,47 @@ export const App: React.FC = () => {
     };
     animId = requestAnimationFrame(updateHotspotsLoop);
     return () => cancelAnimationFrame(animId);
-  }, [showHotspots]);
+  }, [disassemblyPercent]);
 
-  // Inicialización del visor Three.js y configuración de ScrollTrigger
+  // Inicialización de la escena Three.js
   useEffect(() => {
     if (!canvasContainerRef.current) return;
 
-    // Crear instancia del gestor de escena Three.js
     const manager = new SceneManager(canvasContainerRef.current, {
       onComponentSelect: (componentId) => {
         if (!componentId) return;
         soundManager.playMechanicalClick();
-        soundManager.playFuturisticHum();
-        const detail = resolveComponentDetail(componentId);
+        const detail = COMPONENT_DETAILS[componentId] || null;
         if (detail) {
           setSelectedComponent(detail);
         }
       },
-      onHoverChange: () => {
-        // En modo normal, no forzar cambio global si no es clic
-      }
     });
 
     sceneManagerRef.current = manager;
-
-    // Configurar ScrollTrigger maestro enlazado al scroll vertical de la ventana
-    const totalPhases = DISASSEMBLY_PHASES.length;
-    const trigger = ScrollTrigger.create({
-      trigger: '#scroll-story-container',
-      start: 'top top',
-      end: 'bottom bottom',
-      scrub: 0.6,
-      onUpdate: (self) => {
-        const progress = self.progress; // 0 a 1
-        const percent = Math.round(progress * 100);
-        setDisassemblyPercent(percent);
-
-        // Actualizar despiece 3D en el modelo físico
-        manager.setExplodedProgress(progress);
-
-        // Determinar fase activa
-        const rawPhase = progress * (totalPhases - 1);
-        const phaseIdx = Math.min(totalPhases - 1, Math.floor(rawPhase));
-        setCurrentPhaseIndex(phaseIdx);
-
-        // Si no está en modo de inspección libre, mover cámara cinemática
-        if (!manager.getInspectMode()) {
-          const currentPhase = DISASSEMBLY_PHASES[phaseIdx];
-          const nextPhase = DISASSEMBLY_PHASES[Math.min(totalPhases - 1, phaseIdx + 1)];
-          const phaseProgress = rawPhase - phaseIdx;
-
-          // Interpolación suave entre posiciones y objetivos de cámara
-          const camX = currentPhase.cameraPosition[0] + (nextPhase.cameraPosition[0] - currentPhase.cameraPosition[0]) * phaseProgress;
-          const camY = currentPhase.cameraPosition[1] + (nextPhase.cameraPosition[1] - currentPhase.cameraPosition[1]) * phaseProgress;
-          const camZ = currentPhase.cameraPosition[2] + (nextPhase.cameraPosition[2] - currentPhase.cameraPosition[2]) * phaseProgress;
-
-          const targetX = currentPhase.cameraTarget[0] + (nextPhase.cameraTarget[0] - currentPhase.cameraTarget[0]) * phaseProgress;
-          const targetY = currentPhase.cameraTarget[1] + (nextPhase.cameraTarget[1] - currentPhase.cameraTarget[1]) * phaseProgress;
-          const targetZ = currentPhase.cameraTarget[2] + (nextPhase.cameraTarget[2] - currentPhase.cameraTarget[2]) * phaseProgress;
-
-          manager.setCameraPosition([camX, camY, camZ], [targetX, targetY, targetZ], 0.2);
-        }
-
-        // Variación dinámica de telemetría térmica simulada
-        // A mayor apertura, aumenta la eficacia de refrigeración
-        const dynamicCpu = Math.round(48 + Math.sin(progress * Math.PI) * 36);
-        const dynamicGpu = Math.round(44 + Math.sin(progress * Math.PI) * 38);
-        const dynamicRPM = Math.round(2400 + progress * 3200);
-
-        setCpuTemp(dynamicCpu);
-        setGpuTemp(dynamicGpu);
-        setFanRPM(dynamicRPM);
-        manager.setFanRPM(dynamicRPM);
-      }
-    });
+    manager.setTheme('studio');
 
     return () => {
-      trigger.kill();
       manager.dispose();
       sceneManagerRef.current = null;
     };
   }, []);
 
-  // Mapeo seguro de identificadores de componentes a detalles técnicos
-  const resolveComponentDetail = (id: string): ComponentDetail | null => {
-    if (COMPONENT_DETAILS[id]) return COMPONENT_DETAILS[id];
-    if (id === 'exterior') return COMPONENT_DETAILS['chassis'];
-    if (id === 'modules') return COMPONENT_DETAILS['ram'];
-    return null;
-  };
-
-  // Cambio de modo de visualización: Normal, Térmico, Rayos X
-  const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
-    if (sceneManagerRef.current) {
-      sceneManagerRef.current.setViewMode(mode);
-    }
-  };
-
-  // Cambio de tema global: Studio Claro, Cyber Oscuro, CAD Blueprint
-  const handleThemeChange = (newTheme: AppTheme) => {
-    setTheme(newTheme);
-    if (sceneManagerRef.current) {
-      sceneManagerRef.current.setTheme(newTheme);
-    }
-  };
-
-  // Alternar modo de inspección 360°
-  const handleToggleInspect = () => {
-    const nextState = !isInspecting;
-    setIsInspecting(nextState);
-    if (sceneManagerRef.current) {
-      sceneManagerRef.current.setInspectMode(nextState);
-    }
-  };
-
-  // Toggle de audio
-  const handleToggleSound = () => {
-    const active = soundManager.toggleSound();
-    setSoundEnabled(active);
-  };
-
-  // Ajuste manual de perfil de ventilador desde el HUD
-  const handleFanSpeedPresetChange = (rpm: number) => {
-    setFanRPM(rpm);
-    if (sceneManagerRef.current) {
-      sceneManagerRef.current.setFanRPM(rpm);
-    }
-  };
-
-  // Selección de componente desde lista o botones
-  const handleSelectComponent = (componentId: string) => {
-    const detail = resolveComponentDetail(componentId);
-    if (detail) {
-      setSelectedComponent(detail);
-      if (sceneManagerRef.current) {
-        sceneManagerRef.current.highlightComponent(detail.id);
-      }
-    }
-  };
-
-  // Enfocar cámara 3D sobre la pieza seleccionada
-  const handleFocusCamera = (componentId: string) => {
-    if (!sceneManagerRef.current) return;
-
-    // Buscar una posición conveniente para el componente
-    const targetMap: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
-      cooling: { pos: [-14, 18, 14], target: [0, 2, -1] },
-      motherboard: { pos: [0, 16, 12], target: [0, 0, -1] },
-      ram: { pos: [-2, 10, 8], target: [-0.2, 0.4, -0.5] },
-      ssd: { pos: [-10, 12, 10], target: [-4.6, 0.3, 0.2] },
-      battery: { pos: [0, 12, 18], target: [0, 0, 2.7] },
-      display: { pos: [0, 10, 22], target: [0, 4, 0] },
-      keyboard: { pos: [0, 20, 10], target: [0, 0, 0] },
-      chassis: { pos: [14, -6, 16], target: [0, -1, 0] }
-    };
-
-    const config = targetMap[componentId] || { pos: [18, 14, 26], target: [0, 0, 0] };
-    sceneManagerRef.current.setCameraPosition(config.pos, config.target, 1.2);
-    setSelectedComponent(null);
-  };
-
-  // Salto directo a una fase de desmontaje
-  const handleJumpToPhase = (phaseIndex: number) => {
-    const targetSection = document.getElementById(`phase-section-${phaseIndex}`);
-    if (targetSection) {
-      targetSection.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  // Cambio manual del deslizador de despiece
-  const handleSliderPercentChange = (percent: number) => {
+  // Actualización del progreso de despiece en el motor 3D
+  const handlePercentChange = useCallback((percent: number) => {
     if (autoPlayTweenRef.current) {
       autoPlayTweenRef.current.kill();
       autoPlayTweenRef.current = null;
       setIsAutoPlaying(false);
     }
-    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-    const targetY = (percent / 100) * maxScroll;
-    window.scrollTo({ top: targetY, behavior: 'instant' });
-  };
+    setDisassemblyPercent(percent);
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setExplodedProgress(percent / 100);
+    }
+  }, []);
 
-  // Autoplay / Recorrido cinemático automático de 20s
-  const handleToggleAutoPlay = () => {
+  // Autoplay / recorrido de desmontaje de 20s
+  const handleToggleAutoPlay = useCallback(() => {
     if (isAutoPlaying) {
       if (autoPlayTweenRef.current) {
         autoPlayTweenRef.current.kill();
@@ -245,140 +103,197 @@ export const App: React.FC = () => {
       setIsAutoPlaying(false);
     } else {
       setIsAutoPlaying(true);
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      const currentScroll = window.scrollY;
-      const targetScroll = currentScroll >= maxScroll - 50 ? 0 : maxScroll;
-      const distanceRatio = Math.abs(targetScroll - currentScroll) / (maxScroll || 1);
-      const duration = Math.max(8, 20 * distanceRatio);
+      const targetPercent = disassemblyPercent >= 98 ? 0 : 100;
+      const distance = Math.abs(targetPercent - disassemblyPercent);
+      const duration = Math.max(4, (distance / 100) * 18);
 
-      const obj = { y: currentScroll };
+      const obj = { val: disassemblyPercent };
       autoPlayTweenRef.current = gsap.to(obj, {
-        y: targetScroll,
+        val: targetPercent,
         duration,
         ease: 'power1.inOut',
         onUpdate: () => {
-          window.scrollTo(0, obj.y);
+          const p = Math.round(obj.val);
+          setDisassemblyPercent(p);
+          if (sceneManagerRef.current) {
+            sceneManagerRef.current.setExplodedProgress(p / 100);
+          }
         },
         onComplete: () => {
           setIsAutoPlaying(false);
-        }
+          autoPlayTweenRef.current = null;
+        },
       });
     }
+  }, [isAutoPlaying, disassemblyPercent]);
+
+  // Cambio de tema: Studio Light, Cyber Dark o Blueprint CAD
+  const handleThemeChange = (newTheme: AppTheme) => {
+    setTheme(newTheme);
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setTheme(newTheme);
+    }
   };
 
-  // Selección de ángulo de cámara preconfigurado
+  // Cambio de modo de vista: Normal, Térmico (FLIR) o Rayos X
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setViewMode(mode);
+    }
+  };
+
+  // Alternar visibilidad de un sistema mayor
+  const handleToggleSystem = (system: 'enclosure' | 'cooling' | 'computing' | 'power' | 'display') => {
+    setSystemVisibility((prev) => {
+      const nextVal = !prev[system];
+      if (sceneManagerRef.current) {
+        sceneManagerRef.current.setSystemVisibility(system, nextVal);
+      }
+      return { ...prev, [system]: nextVal };
+    });
+  };
+
+  // Selección de componente desde la barra lateral o hotspot
+  const handleSelectComponent = (componentId: string) => {
+    const detail = COMPONENT_DETAILS[componentId] || null;
+    setSelectedComponent(detail);
+
+    // Ajustar cámara para encuadrar la pieza
+    if (sceneManagerRef.current) {
+      const targetMap: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
+        cooling: { pos: [-14, 18, 14], target: [0, 2, -1] },
+        motherboard: { pos: [0, 16, 12], target: [0, 0, -1] },
+        ram: { pos: [-2, 10, 8], target: [-0.2, 0.4, -0.5] },
+        ssd: { pos: [-10, 12, 10], target: [-4.6, 0.3, 0.2] },
+        battery: { pos: [0, 12, 18], target: [0, 0, 2.7] },
+        display: { pos: [0, 10, 22], target: [0, 4, 0] },
+        chassis: { pos: [14, -6, 16], target: [0, -1, 0] },
+      };
+      const cfg = targetMap[componentId] || { pos: [18, 14, 26], target: [0, 0, 0] };
+      sceneManagerRef.current.setCameraPosition(cfg.pos, cfg.target, 1.0);
+    }
+  };
+
+  // Presets de cámara
   const handleSelectCameraPreset = (preset: 'perspective' | 'top' | 'cooling' | 'front' | 'bottom') => {
     setActiveCameraPreset(preset);
-    if (sceneManagerRef.current) {
-      sceneManagerRef.current.setCameraPreset(preset);
+    if (!sceneManagerRef.current) return;
+
+    switch (preset) {
+      case 'perspective':
+        sceneManagerRef.current.setCameraPosition([18, 14, 26], [0, 0, 0], 1.0);
+        break;
+      case 'top':
+        sceneManagerRef.current.setCameraPosition([0, 36, 0.1], [0, 0, 0], 1.0);
+        break;
+      case 'front':
+        sceneManagerRef.current.setCameraPosition([0, 6, 32], [0, 2, 0], 1.0);
+        break;
+      case 'bottom':
+        sceneManagerRef.current.setCameraPosition([0, -32, 0.1], [0, 0, 0], 1.0);
+        break;
+      case 'cooling':
+        sceneManagerRef.current.setCameraPosition([-16, 22, 16], [0, 2, -1], 1.0);
+        break;
     }
   };
 
-  // Aislamiento de capa estilo Inside MacBook
-  const handleSelectCategory = (cat: string | null) => {
-    setActiveCategory(cat);
-    if (sceneManagerRef.current) {
-      sceneManagerRef.current.isolateCategory(cat);
-    }
+  const handleResetCamera = () => {
+    handleSelectCameraPreset('perspective');
   };
 
-  const currentPhaseTitle = DISASSEMBLY_PHASES[currentPhaseIndex]?.title || 'ASUS TUF A15';
+  const isLight = theme === 'studio';
 
   return (
     <div
-      className={`relative min-h-screen font-['Rajdhani'] transition-colors duration-300 selection:bg-[#FFB800] selection:text-black ${
-        theme === 'studio'
-          ? 'bg-[#F6F7F9] text-slate-800'
-          : theme === 'blueprint'
-          ? 'bg-[#07152B] text-slate-100'
-          : 'bg-[#080A0D] text-slate-100'
+      className={`relative w-screen h-screen overflow-hidden font-sans select-none transition-colors duration-500 ${
+        isLight ? 'bg-[#F5F5F7] text-slate-800' : 'bg-[#0B0E14] text-slate-100'
       }`}
     >
-      {/* Barra de Navegación Superior Fija */}
+      {/* Canvas 3D a pantalla completa */}
+      <div ref={canvasContainerRef} className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing" />
+
+      {/* Navegación superior estilo Inside MacBook */}
       <HeaderNav
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
-        isInspecting={isInspecting}
-        onToggleInspect={handleToggleInspect}
         soundEnabled={soundEnabled}
-        onToggleSound={handleToggleSound}
-        currentPhaseName={currentPhaseTitle}
+        onToggleSound={() => {
+          const next = soundManager.toggleSound();
+          setSoundEnabled(next);
+        }}
         theme={theme}
         onThemeChange={handleThemeChange}
+        isAutoPlaying={isAutoPlaying}
+        onToggleAutoPlay={handleToggleAutoPlay}
+        onOpenSpecs={() => setIsSpecsOpen(true)}
       />
 
-      {/* Contenedor del Viewport 3D Three.js Fijo de Fondo */}
-      <div
-        ref={canvasContainerRef}
-        className="fixed inset-0 z-0 w-full h-full pointer-events-auto"
+      {/* Hero Headline en la esquina superior izquierda (Inside MacBook style) */}
+      <div className="fixed left-6 top-20 z-20 pointer-events-none max-w-sm hidden lg:block">
+        <span className="text-[10px] font-mono tracking-widest uppercase opacity-50 block mb-0.5">
+          Engineered, layer by layer
+        </span>
+        <h1 className="text-xl font-bold tracking-tight">ASUS TUF Gaming A15</h1>
+        <p className="text-[11px] opacity-60 font-mono mt-0.5">
+          15.6-inch &nbsp;/&nbsp; 2026 &nbsp;/&nbsp; Ryzen 9 + RTX 4070
+        </p>
+      </div>
+
+      {/* Explorador de Ensamblaje en la barra lateral izquierda */}
+      <AssemblyExplorer
+        theme={theme}
+        systemVisibility={systemVisibility}
+        onToggleSystem={handleToggleSystem}
+        onSelectComponent={handleSelectComponent}
       />
 
-      {/* Marcadores 3D flotantes anclados a las piezas físicas */}
+      {/* Marcadores 3D flotantes sutiles (visibles solo durante despiece) */}
       <HotspotsOverlay
         hotspots={hotspots}
-        isVisible={showHotspots && !isInspecting}
+        isVisible={true}
+        disassemblyPercent={disassemblyPercent}
         onSelectComponent={handleSelectComponent}
         activeComponentId={selectedComponent?.id || null}
-        currentPhaseTarget={DISASSEMBLY_PHASES[currentPhaseIndex]?.targetComponent}
-        activeCategory={activeCategory}
+        theme={theme}
       />
 
-      {/* Barra de control flotante de Despiece continuo y Cámaras */}
+      {/* Ficha técnica flotante lateral al seleccionar un componente */}
+      <ComponentModal
+        component={selectedComponent}
+        onClose={() => setSelectedComponent(null)}
+        onFocusCamera={(id) => handleSelectComponent(id)}
+        theme={theme}
+      />
+
+      {/* Modal de Especificaciones Generales */}
+      <SpecsModal
+        isOpen={isSpecsOpen}
+        onClose={() => setIsSpecsOpen(false)}
+        theme={theme}
+      />
+
+      {/* Controlador de Desmontaje en la parte inferior */}
       <TeardownController
         disassemblyPercent={disassemblyPercent}
-        onPercentChange={handleSliderPercentChange}
+        onPercentChange={handlePercentChange}
         isAutoPlaying={isAutoPlaying}
         onToggleAutoPlay={handleToggleAutoPlay}
         activeCameraPreset={activeCameraPreset}
         onSelectCameraPreset={handleSelectCameraPreset}
-        activeCategory={activeCategory}
-        onSelectCategory={handleSelectCategory}
-        showHotspots={showHotspots}
-        onToggleHotspots={() => setShowHotspots(!showHotspots)}
+        onResetCamera={handleResetCamera}
         theme={theme}
       />
 
-      {/* Panel Lateral de Telemetría Armoury Crate HUD */}
-      <ArmouryCrateHUD
-        cpuTemp={cpuTemp}
-        gpuTemp={gpuTemp}
-        fanRPM={fanRPM}
-        disassemblyPercent={disassemblyPercent}
-        onFanSpeedPresetChange={handleFanSpeedPresetChange}
-        onSelectComponent={handleSelectComponent}
-        selectedComponentId={selectedComponent?.id || null}
-        theme={theme}
-      />
+      {/* Pie de página sutil con pistas de interacción */}
+      <div className="fixed bottom-3 left-6 z-20 pointer-events-none text-[11px] font-mono opacity-40 hidden sm:block">
+        Drag to rotate &nbsp;·&nbsp; Scroll to zoom
+      </div>
 
-      {/* Modal Desplegable de Especificaciones Técnicas Militares */}
-      <ComponentModal
-        component={selectedComponent}
-        onClose={() => {
-          setSelectedComponent(null);
-          if (sceneManagerRef.current) {
-            sceneManagerRef.current.highlightComponent(null);
-          }
-        }}
-        onFocusCamera={handleFocusCamera}
-      />
-
-      {/* Contenedor de Secciones Narrativas con ScrollTrigger */}
-      <main id="scroll-story-container" className="relative z-10">
-        <ScrollStorySections
-          currentPhaseIndex={currentPhaseIndex}
-          onSelectComponent={handleSelectComponent}
-          onJumpToPhase={handleJumpToPhase}
-          theme={theme}
-        />
-      </main>
-
-      {/* Pie de página sutil con estado de ingeniería y atajos */}
-      <footer className="fixed bottom-3 left-6 z-30 hidden 2xl:flex items-center space-x-3 text-[11px] font-['JetBrains_Mono'] text-slate-400 bg-[#0B0E14]/80 backdrop-blur px-3 py-1.5 rounded border border-[#1E2736]">
-        <div className="w-2 h-2 rounded-full bg-[#FFB800] animate-pulse" />
-        <span>THREE.JS R170 // ACES FILMIC // WEB AUDIO API</span>
-        <span className="text-[#2A364A]">|</span>
-        <span className="text-slate-300">CLIC SOBRE PIEZAS PARA VER INGENIERÍA</span>
-      </footer>
+      <div className="fixed bottom-3 right-6 z-20 pointer-events-none text-[11px] font-mono opacity-40 hidden sm:block">
+        ASUS TUF FA507NV Architecture
+      </div>
     </div>
   );
 };

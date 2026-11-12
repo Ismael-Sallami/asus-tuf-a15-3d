@@ -1,19 +1,27 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import gsap from 'gsap';
 import { LaptopModel } from './LaptopModel';
-import { ViewMode, AppTheme } from '../types/laptop';
+import { AppTheme, CameraPreset, SystemId, ViewMode } from '../types/laptop';
+import { BOARD_GROUPS, getPartById } from '../data/laptopSpecs';
 
 export interface SceneCallbacks {
-  onComponentSelect?: (componentId: string | null) => void;
-  onHoverChange?: (componentId: string | null) => void;
+  onSelectPart?: (partId: string) => void;
+  onSelectBoardGroup?: (groupId: string) => void;
 }
 
-/**
- * Gestor integral del viewport 3D Three.js para el ASUS TUF Gaming A15.
- * Controla escena, renderizado cinematográfico con mapeo de tonos ACES, iluminación TUF,
- * cámara orbital interactiva y detección de piezas mediante Raycasting.
- */
+export interface SceneStateParams {
+  explosion: number;
+  enabledSystems: SystemId[];
+  selectedId: string | null;
+  isolatedId: string | null;
+  boardMode: boolean;
+  boardProgress: number;
+  view: CameraPreset;
+  zoom: number;
+  demoAngle?: number;
+  lidAngle?: number;
+}
+
 export class SceneManager {
   private container: HTMLElement;
   private scene: THREE.Scene;
@@ -22,572 +30,404 @@ export class SceneManager {
   private controls: OrbitControls;
   public laptop: LaptopModel;
 
-  private raycaster: THREE.Raycaster;
-  private mouse: THREE.Vector2;
+  private clock: THREE.Clock;
+  private animationFrameId: number | null = null;
   private callbacks: SceneCallbacks;
 
-  private isInspecting: boolean = false;
-  private animationFrameId: number | null = null;
-  private clock: THREE.Clock;
+  private raycaster: THREE.Raycaster;
+  private pointerDownPos = new THREE.Vector2();
 
-  // Parámetros de cámara cinemática
-  private desiredCameraPos: THREE.Vector3 = new THREE.Vector3(18, 14, 26);
-  private desiredCameraTarget: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
-  private currentCameraTarget: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
-  private cameraTween: gsap.core.Tween | null = null;
-  private targetTween: gsap.core.Tween | null = null;
+  private desiredCamPos = new THREE.Vector3(8, 7.5, 11);
+  private desiredTarget = new THREE.Vector3(0, 1.15, -0.1);
+  private needsCameraSync = true;
 
-  // Estado de telemetría de ventiladores
-  private fanRPM: number = 2400;
-
-  // Luces dinámicas
   private ambientLight!: THREE.AmbientLight;
   private keyLight!: THREE.DirectionalLight;
   private fillLight!: THREE.DirectionalLight;
-  private tufAmberLight!: THREE.SpotLight;
-  private tufCyanLight!: THREE.SpotLight;
-
-  // Elementos de pedestal y suelo
-  private pedestalMesh!: THREE.Mesh;
-  private pedestalMat!: THREE.MeshStandardMaterial;
+  private bottomLight!: THREE.DirectionalLight;
+  private shadowPlane!: THREE.Mesh;
   private shadowMat!: THREE.ShadowMaterial;
-  private gridHelper!: THREE.GridHelper;
-  private ringMesh!: THREE.Mesh;
-  private innerRingMesh!: THREE.Mesh;
+
+  private stateParams: SceneStateParams = {
+    explosion: 0,
+    enabledSystems: ['enclosure', 'power', 'cooling', 'computing', 'display'],
+    selectedId: null,
+    isolatedId: null,
+    boardMode: false,
+    boardProgress: 0,
+    view: 'perspective',
+    zoom: 1
+  };
 
   constructor(container: HTMLElement, callbacks: SceneCallbacks = {}) {
     this.container = container;
     this.callbacks = callbacks;
     this.clock = new THREE.Clock();
 
-    // 1. Escena
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x080a0d);
-    this.scene.fog = new THREE.FogExp2(0x080a0d, 0.022);
 
-    // 2. Cámara
-    const aspect = container.clientWidth / (container.clientHeight || 1);
-    this.camera = new THREE.PerspectiveCamera(42, aspect, 0.1, 100);
-    this.camera.position.set(18, 14, 26);
-    this.camera.lookAt(0, 0, 0);
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
+    // FOV=36° exacto para que a Z = 5 / tan(18°) la altura del plano Z=0 sea 10 unidades exactas
+    this.camera = new THREE.PerspectiveCamera(36, width / Math.max(1, height), 0.1, 100);
+    this.camera.position.set(8, 7.5, 11);
 
-    // 3. Renderizador WebGL
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: false,
+      alpha: true,
       powerPreference: 'high-performance'
     });
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(width, height);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
 
-    // 4. Controles orbitales de inspección libre 360°
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enablePan = false;
+    this.controls.minDistance = 2.5;
+    this.controls.maxDistance = 50;
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.06;
-    this.controls.maxDistance = 55;
-    this.controls.minDistance = 6;
-    this.controls.maxPolarAngle = Math.PI / 2 + 0.15; // Evitar pasar por debajo del suelo
-    this.controls.enabled = false; // Se activa explícitamente en modo inspección
+    this.controls.dampingFactor = 0.09;
+    this.controls.target.set(0, 1.15, -0.1);
+    this.controls.addEventListener('start', () => {
+      this.needsCameraSync = false;
+    });
 
-    // 5. Cargar modelo paramétrico del portátil
     this.laptop = new LaptopModel();
     this.scene.add(this.laptop.group);
 
-    // 6. Iluminación cinematográfica TUF Gaming
     this.setupLighting();
-
-    // 7. Plataforma / Suelo de pedestal táctico
-    this.setupPedestal();
-
-    // 8. Raycaster para clics e interacciones
     this.raycaster = new THREE.Raycaster();
-    this.mouse = new THREE.Vector2();
 
     this.bindEvents();
+    this.recomputeCameraGoal();
     this.startLoop();
   }
 
-  /**
-   * Configura la iluminación de estudio con acentos ámbar (#FFB800) y cian (#00E5FF)
-   */
   private setupLighting(): void {
-    // Luz ambiental oscura para mantener contraste dramático
-    this.ambientLight = new THREE.AmbientLight(0x131924, 1.2);
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
     this.scene.add(this.ambientLight);
 
-    // Luz clave superior (Key Light)
-    this.keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    this.keyLight.position.set(12, 22, 14);
+    this.keyLight = new THREE.DirectionalLight(0xffffff, 3.1);
+    this.keyLight.position.set(3, 9, 5);
     this.keyLight.castShadow = true;
-    this.keyLight.shadow.mapSize.width = 2048;
-    this.keyLight.shadow.mapSize.height = 2048;
-    this.keyLight.shadow.camera.near = 5;
-    this.keyLight.shadow.camera.far = 60;
-    this.keyLight.shadow.camera.left = -18;
-    this.keyLight.shadow.camera.right = 18;
-    this.keyLight.shadow.camera.top = 18;
-    this.keyLight.shadow.camera.bottom = -18;
-    this.keyLight.shadow.bias = -0.0003;
-    this.keyLight.shadow.normalBias = 0.02;
+    this.keyLight.shadow.mapSize.set(1024, 1024);
+    this.keyLight.shadow.camera.near = 0.5;
+    this.keyLight.shadow.camera.far = 28;
+    const d = 7.5;
+    this.keyLight.shadow.camera.left = -d;
+    this.keyLight.shadow.camera.right = d;
+    this.keyLight.shadow.camera.top = d;
+    this.keyLight.shadow.camera.bottom = -d;
+    this.keyLight.shadow.bias = -0.001;
     this.scene.add(this.keyLight);
 
-    // Luz de relleno fría (Fill Light)
-    this.fillLight = new THREE.DirectionalLight(0x4a6572, 1.0);
-    this.fillLight.position.set(-14, 10, -10);
+    this.fillLight = new THREE.DirectionalLight(0xe2e9ee, 1.45);
+    this.fillLight.position.set(-7, 5, -3);
     this.scene.add(this.fillLight);
 
-    // Luz de recorte 1: Ámbar TUF Gaming (#FFB800) destacando aristas mecánicas
-    this.tufAmberLight = new THREE.SpotLight(0xffb800, 3.5, 45, Math.PI / 4, 0.4, 1.2);
-    this.tufAmberLight.position.set(-16, 12, 16);
-    this.tufAmberLight.target = this.laptop.group;
-    this.scene.add(this.tufAmberLight);
+    this.bottomLight = new THREE.DirectionalLight(0xdce7ee, 1.5);
+    this.bottomLight.position.set(1, -6, 3);
+    this.scene.add(this.bottomLight);
 
-    // Luz de recorte 2: Cian Cyberpunk (#00E5FF) perfilando silicio y refrigeración
-    this.tufCyanLight = new THREE.SpotLight(0x00e5ff, 2.8, 45, Math.PI / 4, 0.4, 1.2);
-    this.tufCyanLight.position.set(18, 14, -14);
-    this.tufCyanLight.target = this.laptop.group;
-    this.scene.add(this.tufCyanLight);
+    const shadowGeo = new THREE.PlaneGeometry(18, 18);
+    this.shadowMat = new THREE.ShadowMaterial({ opacity: 0.18, color: 0x1e293b });
+    this.shadowPlane = new THREE.Mesh(shadowGeo, this.shadowMat);
+    this.shadowPlane.rotation.x = -Math.PI / 2;
+    this.shadowPlane.position.y = -0.15;
+    this.shadowPlane.receiveShadow = true;
+    this.scene.add(this.shadowPlane);
   }
 
-  /**
-   * Crea una plataforma circular táctica con plano receptor de sombras reales y cuadrícula militar
-   */
-  private setupPedestal(): void {
-    // 1. Pedestal base circular con bisel metálico táctico
-    const pedestalGeo = new THREE.CylinderGeometry(15.5, 16.0, 0.4, 64);
-    this.pedestalMat = new THREE.MeshStandardMaterial({
-      color: 0x0a0d13,
-      roughness: 0.85,
-      metalness: 0.25
-    });
-    this.pedestalMesh = new THREE.Mesh(pedestalGeo, this.pedestalMat);
-    this.pedestalMesh.position.y = -4.7;
-    this.pedestalMesh.receiveShadow = true;
-    this.scene.add(this.pedestalMesh);
-
-    // 2. Plano sutil de sombra de contacto (ShadowMaterial) sobre el pedestal
-    const shadowGeo = new THREE.PlaneGeometry(34, 34);
-    this.shadowMat = new THREE.ShadowMaterial({
-      opacity: 0.52
-    });
-    const shadowPlane = new THREE.Mesh(shadowGeo, this.shadowMat);
-    shadowPlane.rotation.x = -Math.PI / 2;
-    shadowPlane.position.y = -4.49;
-    shadowPlane.receiveShadow = true;
-    this.scene.add(shadowPlane);
-
-    // 3. Suelo con retícula técnica de ingeniería
-    this.gridHelper = new THREE.GridHelper(48, 48, 0x2a3648, 0x141a24);
-    this.gridHelper.position.y = -4.48;
-    this.scene.add(this.gridHelper);
-
-    // 4. Anillo perimetral ámbar TUF Gaming (#FFB800)
-    const ringGeo = new THREE.RingGeometry(14.8, 15.1, 64);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0xffb800,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.4
-    });
-    this.ringMesh = new THREE.Mesh(ringGeo, ringMat);
-    this.ringMesh.rotation.x = Math.PI / 2;
-    this.ringMesh.position.y = -4.47;
-    this.scene.add(this.ringMesh);
-
-    // 5. Anillo concéntrico interior cian (#00E5FF)
-    const innerRingGeo = new THREE.RingGeometry(8.9, 9.05, 48);
-    const innerRingMat = new THREE.MeshBasicMaterial({
-      color: 0x00e5ff,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.25
-    });
-    this.innerRingMesh = new THREE.Mesh(innerRingGeo, innerRingMat);
-    this.innerRingMesh.rotation.x = Math.PI / 2;
-    this.innerRingMesh.position.y = -4.47;
-    this.scene.add(this.innerRingMesh);
-  }
-
-  /**
-   * Conecta los listeners del DOM para redimensionado, hover y clics
-   */
   private bindEvents(): void {
     this.onWindowResize = this.onWindowResize.bind(this);
-    this.onPointerMove = this.onPointerMove.bind(this);
     this.onPointerDown = this.onPointerDown.bind(this);
+    this.onPointerUp = this.onPointerUp.bind(this);
 
     window.addEventListener('resize', this.onWindowResize);
-    this.container.addEventListener('mousemove', this.onPointerMove);
-    this.container.addEventListener('click', this.onPointerDown);
+    this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
+    this.renderer.domElement.addEventListener('pointerup', this.onPointerUp);
   }
 
   private onWindowResize(): void {
     if (!this.container) return;
-    const width = this.container.clientWidth;
-    const height = this.container.clientHeight || 1;
-    this.camera.aspect = width / height;
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
+    this.camera.aspect = w / Math.max(1, h);
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(w, h);
+    this.recomputeCameraGoal();
   }
 
-  private onPointerMove(event: MouseEvent): void {
-    const rect = this.container.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  private onPointerDown(e: PointerEvent): void {
+    this.pointerDownPos.set(e.clientX, e.clientY);
+  }
 
-    // Raycast para cursor y hover
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    const intersects = this.raycaster.intersectObjects(this.laptop.getInteractiveMeshes(), false);
+  private onPointerUp(e: PointerEvent): void {
+    const dist = Math.hypot(e.clientX - this.pointerDownPos.x, e.clientY - this.pointerDownPos.y);
+    if (dist > 6) return;
 
-    if (intersects.length > 0) {
-      const hit = intersects[0].object;
-      const componentId = this.findComponentId(hit);
-      this.container.style.cursor = componentId ? 'pointer' : 'default';
-      if (this.callbacks.onHoverChange) {
-        this.callbacks.onHoverChange(componentId);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    this.raycaster.setFromCamera(mouse, this.camera);
+
+    if (this.stateParams.boardMode) {
+      const hits = this.raycaster.intersectObjects(this.laptop.boardStudyGroup.children, true);
+      for (const hit of hits) {
+        let curr: THREE.Object3D | null = hit.object;
+        while (curr) {
+          if (curr.userData?.boardGroupId) {
+            this.callbacks.onSelectBoardGroup?.(curr.userData.boardGroupId);
+            return;
+          }
+          curr = curr.parent;
+        }
       }
+      return;
+    }
+
+    const hits = this.raycaster.intersectObjects(this.laptop.assemblyGroup.children, true);
+    for (const hit of hits) {
+      if (!hit.object.visible) continue;
+      let curr: THREE.Object3D | null = hit.object;
+      while (curr) {
+        if (curr.userData?.componentId) {
+          this.callbacks.onSelectPart?.(curr.userData.componentId);
+          return;
+        }
+        curr = curr.parent;
+      }
+    }
+  }
+
+  public syncState(next: Partial<SceneStateParams>, forceCameraSync = false): void {
+    const prev = this.stateParams;
+    this.stateParams = { ...prev, ...next };
+
+    if (
+      forceCameraSync ||
+      prev.view !== this.stateParams.view ||
+      prev.isolatedId !== this.stateParams.isolatedId ||
+      prev.boardMode !== this.stateParams.boardMode ||
+      prev.boardProgress !== this.stateParams.boardProgress ||
+      prev.zoom !== this.stateParams.zoom ||
+      Math.abs(prev.explosion - this.stateParams.explosion) > 0.001
+    ) {
+      this.recomputeCameraGoal();
+    }
+  }
+
+  public resetCamera(): void {
+    this.recomputeCameraGoal();
+  }
+
+  private recomputeCameraGoal(): void {
+    const { explosion, isolatedId, view, zoom, boardMode, boardProgress } = this.stateParams;
+    const width = this.container.clientWidth || window.innerWidth;
+    const isNarrow = width < 580;
+
+    if (boardMode) {
+      const mobileScale = isNarrow ? 1.38 : 1.0;
+      const angle = -0.12 + boardProgress * 0.16;
+      this.desiredCamPos.set(
+        Math.sin(angle) * 8 * mobileScale,
+        (11.5 + boardProgress * 2.0) * mobileScale,
+        (7.3 + boardProgress * 1.6) * mobileScale
+      );
+      this.desiredTarget.set(0, 0.55, 0);
+      this.needsCameraSync = true;
+      return;
+    }
+
+    const bigParts = ['top-case', 'bottom-cover', 'keyboard', 'display', 'heatsink', 'logic-board', 'battery'];
+    const baseDist = isolatedId
+      ? bigParts.includes(isolatedId)
+        ? 10.5
+        : 5.4
+      : 14.2 + explosion * 3.6;
+
+    const dist = (baseDist * (isNarrow ? 1.32 : 1.0) * (view === 'top' && !isolatedId ? 1 + explosion * 0.25 : 1)) / zoom;
+    const targetY = isolatedId ? (isolatedId === 'display' ? 1.3 : 0.45) : 1.1 + explosion * 0.6;
+    const targetZ = isolatedId ? 0 : view === 'top' ? -0.7 - explosion * 0.75 : -0.1;
+
+    this.desiredTarget.set(0, targetY, targetZ);
+
+    if (view === 'bottom') {
+      this.desiredCamPos.set(0, targetY - dist, targetZ + 0.01);
+    } else if (view === 'left' || view === 'right') {
+      this.desiredCamPos.set((view === 'left' ? -1 : 1) * dist, 0.4, 0);
+    } else if (view === 'top') {
+      this.desiredCamPos.set(0, targetY + dist, targetZ + 0.01);
+    } else if (view === 'front') {
+      this.desiredCamPos.set(0, targetY + dist * 0.2, dist);
     } else {
-      this.container.style.cursor = 'default';
-      if (this.callbacks.onHoverChange) {
-        this.callbacks.onHoverChange(null);
-      }
+      this.desiredCamPos.set(dist * 0.53, targetY + dist * 0.44, dist * 0.72);
     }
+
+    this.needsCameraSync = true;
   }
 
-  private onPointerDown(): void {
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    const intersects = this.raycaster.intersectObjects(this.laptop.getInteractiveMeshes(), false);
-
-    if (intersects.length > 0) {
-      const hit = intersects[0].object;
-      const componentId = this.findComponentId(hit);
-      if (this.callbacks.onComponentSelect) {
-        this.callbacks.onComponentSelect(componentId);
-      }
+  public setTheme(theme: AppTheme): void {
+    if (theme === 'studio') {
+      this.ambientLight.intensity = 1.45;
+      this.keyLight.intensity = 3.1;
+      this.fillLight.intensity = 1.5;
+      this.shadowMat.opacity = 0.16;
+    } else if (theme === 'blueprint') {
+      this.ambientLight.intensity = 1.6;
+      this.keyLight.intensity = 2.6;
+      this.fillLight.intensity = 1.8;
+      this.shadowMat.opacity = 0.25;
     } else {
-      if (this.callbacks.onComponentSelect) {
-        this.callbacks.onComponentSelect(null);
-      }
+      this.ambientLight.intensity = 1.25;
+      this.keyLight.intensity = 2.8;
+      this.fillLight.intensity = 1.4;
+      this.shadowMat.opacity = 0.32;
     }
   }
 
-  /**
-   * Busca en la cadena de ancestros de la malla el identificador de componente asociado
-   */
-  private findComponentId(obj: THREE.Object3D | null): string | null {
-    let curr = obj;
-    while (curr && curr !== this.laptop.group) {
-      if (curr.userData && curr.userData.componentId) {
-        return curr.userData.componentId as string;
-      }
-      curr = curr.parent;
-    }
-    return null;
-  }
-
-  /**
-   * Actualiza la posición y punto de mira de la cámara.
-   * - Si duration <= 0.25s (scrollytelling interactivo continuo), actualiza las metas cinemáticas
-   *   directamente y el bucle de renderizado aplica amortiguamiento exponencial framerate-independent
-   *   a 60 FPS sin crear/destruir tweens por cada píxel de scroll, eliminando micro-inercias y saltos.
-   * - Si duration > 0.25s (selección manual de fases o botones HUD), interpola cinemáticamente con GSAP.
-   */
-  public setCameraPosition(
-    pos: [number, number, number],
-    target: [number, number, number],
-    duration: number = 1.4
-  ): void {
-    if (this.cameraTween) {
-      this.cameraTween.kill();
-      this.cameraTween = null;
-    }
-    if (this.targetTween) {
-      this.targetTween.kill();
-      this.targetTween = null;
-    }
-
-    if (duration <= 0.25) {
-      // Respuesta de scroll reactiva e inmediata
-      this.desiredCameraPos.set(pos[0], pos[1], pos[2]);
-      this.desiredCameraTarget.set(target[0], target[1], target[2]);
-    } else {
-      // Transición cinematográfica suave entre hitos
-      this.cameraTween = gsap.to(this.desiredCameraPos, {
-        x: pos[0],
-        y: pos[1],
-        z: pos[2],
-        duration,
-        ease: 'power2.out'
-      });
-
-      this.targetTween = gsap.to(this.desiredCameraTarget, {
-        x: target[0],
-        y: target[1],
-        z: target[2],
-        duration,
-        ease: 'power2.out'
-      });
-    }
-  }
-
-  /**
-   * Habilita o deshabilita el modo de inspección 360° mediante OrbitControls
-   */
-  public setInspectMode(enabled: boolean): void {
-    this.isInspecting = enabled;
-    this.controls.enabled = enabled;
-    if (enabled) {
-      this.controls.target.copy(this.currentCameraTarget);
-      this.controls.update();
-    } else {
-      this.desiredCameraPos.copy(this.camera.position);
-      this.desiredCameraTarget.copy(this.controls.target);
-      this.currentCameraTarget.copy(this.controls.target);
-    }
-  }
-
-  public getInspectMode(): boolean {
-    return this.isInspecting;
-  }
-
-  /**
-   * Sincroniza el nivel de desmontaje físico de las piezas del portátil (0 a 1)
-   */
-  public setExplodedProgress(t: number): void {
-    this.laptop.setExplodedProgress(t);
-  }
-
-  /**
-   * Alterna el modo de visualización de materiales: Normal, Térmico o Rayos X
-   */
   public setViewMode(mode: ViewMode): void {
     this.laptop.setViewMode(mode);
   }
 
   /**
-   * Resalta con halo y emisión un componente específico
+   * Devuelve las coordenadas 2D de pantalla de la pieza seleccionada para mostrar su pin flotante
    */
-  public highlightComponent(id: string | null): void {
-    this.laptop.highlightComponent(id);
+  public getSelectedPartPin(): { x: number; y: number; name: string; visible: boolean } | null {
+    const { selectedId, isolatedId, explosion, boardMode } = this.stateParams;
+    if (!selectedId || isolatedId || explosion > 0.65 || boardMode) return null;
+
+    const worldPos = this.laptop.getPartWorldPosition(selectedId);
+    const part = getPartById(selectedId);
+    if (!worldPos || !part) return null;
+
+    const projected = worldPos.clone().project(this.camera);
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
+
+    const x = ((projected.x + 1) / 2) * w;
+    const y = ((-projected.y + 1) / 2) * h;
+    const inBounds = projected.z < 1 && x >= 20 && x <= w - 20 && y >= 20 && y <= h - 20;
+
+    return { x, y, name: part.name, visible: inBounds };
   }
 
   /**
-   * Ajusta la velocidad de las turbinas para la animación y telemetría
+   * Devuelve las coordenadas 2D de los 8 bloques funcionales en el modo "Explorar placa base"
    */
-  public setFanRPM(rpm: number): void {
-    this.fanRPM = rpm;
-  }
+  public getBoardGroupPins(): Array<{
+    id: string;
+    index: number;
+    shortName: string;
+    name: string;
+    color: string;
+    x: number;
+    y: number;
+    visible: boolean;
+  }> {
+    if (!this.stateParams.boardMode) return [];
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
 
-  /**
-   * Transiciona la cámara cinemática hacia un ángulo preconfigurado de estudio
-   */
-  public setCameraPreset(preset: 'perspective' | 'top' | 'cooling' | 'front' | 'bottom'): void {
-    const presets: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
-      perspective: { pos: [18, 14, 26], target: [0, 0, 0] },
-      top: { pos: [0, 25, 0.4], target: [0, 0, 0] },
-      cooling: { pos: [-18, 11, 8], target: [-2, 1, -1] },
-      front: { pos: [0, 5, 26], target: [0, 2, 0] },
-      bottom: { pos: [14, -14, 18], target: [0, -1, 0] }
-    };
-
-    const targetConfig = presets[preset] || presets.perspective;
-    this.setCameraPosition(targetConfig.pos, targetConfig.target, 1.2);
-  }
-
-  /**
-   * Conmuta el tema de renderizado de la escena 3D (Studio Claro, Cyberpunk Oscuro, o Blueprint CAD)
-   */
-  public setTheme(theme: AppTheme): void {
-    if (theme === 'studio') {
-      // Tema Claro Minimalista Estilo Apple / Inside MacBook
-      this.scene.background = new THREE.Color(0xf6f7f9);
-      this.scene.fog = new THREE.FogExp2(0xf6f7f9, 0.015);
-
-      this.ambientLight.color.set(0xffffff);
-      this.ambientLight.intensity = 2.4;
-
-      this.keyLight.color.set(0xffffff);
-      this.keyLight.intensity = 2.8;
-
-      this.fillLight.color.set(0xe2e8f0);
-      this.fillLight.intensity = 1.6;
-
-      this.tufAmberLight.intensity = 0.5;
-      this.tufCyanLight.intensity = 0.5;
-
-      this.pedestalMat.color.set(0xffffff);
-      this.pedestalMat.roughness = 0.35;
-      this.pedestalMat.metalness = 0.05;
-
-      this.shadowMat.opacity = 0.16;
-      this.gridHelper.visible = false;
-      this.ringMesh.visible = false;
-      this.innerRingMesh.visible = false;
-
-      this.renderer.toneMappingExposure = 1.08;
-    } else if (theme === 'blueprint') {
-      // Tema CAD Blueprint Técnico
-      this.scene.background = new THREE.Color(0x07152b);
-      this.scene.fog = new THREE.FogExp2(0x07152b, 0.02);
-
-      this.ambientLight.color.set(0x0e2a4a);
-      this.ambientLight.intensity = 1.8;
-
-      this.keyLight.color.set(0x00e5ff);
-      this.keyLight.intensity = 2.5;
-
-      this.fillLight.color.set(0x0077b6);
-      this.fillLight.intensity = 1.4;
-
-      this.tufAmberLight.intensity = 1.2;
-      this.tufCyanLight.intensity = 4.2;
-
-      this.pedestalMat.color.set(0x0a192f);
-      this.pedestalMat.roughness = 0.7;
-      this.pedestalMat.metalness = 0.3;
-
-      this.shadowMat.opacity = 0.4;
-      this.gridHelper.visible = true;
-      this.ringMesh.visible = true;
-      this.innerRingMesh.visible = true;
-
-      this.renderer.toneMappingExposure = 1.15;
-    } else {
-      // Tema Cyber Militar Oscuro TUF (Por defecto)
-      this.scene.background = new THREE.Color(0x080a0d);
-      this.scene.fog = new THREE.FogExp2(0x080a0d, 0.022);
-
-      this.ambientLight.color.set(0x131924);
-      this.ambientLight.intensity = 1.2;
-
-      this.keyLight.color.set(0xffffff);
-      this.keyLight.intensity = 2.2;
-
-      this.fillLight.color.set(0x4a6572);
-      this.fillLight.intensity = 1.0;
-
-      this.tufAmberLight.intensity = 3.5;
-      this.tufCyanLight.intensity = 2.8;
-
-      this.pedestalMat.color.set(0x0a0d13);
-      this.pedestalMat.roughness = 0.85;
-      this.pedestalMat.metalness = 0.25;
-
-      this.shadowMat.opacity = 0.52;
-      this.gridHelper.visible = true;
-      this.ringMesh.visible = true;
-      this.innerRingMesh.visible = true;
-
-      this.renderer.toneMappingExposure = 1.15;
-    }
-  }
-
-  /**
-   * Conmuta la visibilidad de los subsistemas mayores (estilo Inside MacBook)
-   */
-  public setSystemVisibility(system: 'enclosure' | 'cooling' | 'computing' | 'power' | 'display', visible: boolean): void {
-    this.laptop.setSystemVisibility(system, visible);
-  }
-
-  /**
-   * Aísla un subsistema específico (ej. refrigeración o silicio) aplicando efecto translúcido
-   */
-  public isolateCategory(category: string | null): void {
-    this.laptop.isolateCategory(category);
-  }
-
-  /**
-   * Calcula las coordenadas de pantalla 2D proyectadas para cada hotspot 3D en tiempo real
-   */
-  public getHotspotsScreenPositions(): Record<
-    string,
-    {
-      x: number;
-      y: number;
-      visible: boolean;
-      name: string;
-      code: string;
-      badge: string;
-      metric: string;
-      targetId: string;
-    }
-  > {
-    const result: Record<
-      string,
-      {
-        x: number;
-        y: number;
-        visible: boolean;
-        name: string;
-        code: string;
-        badge: string;
-        metric: string;
-        targetId: string;
+    return BOARD_GROUPS.map((bg, idx) => {
+      const worldPos = this.laptop.getBoardGroupWorldPosition(bg.id);
+      if (!worldPos) {
+        return { id: bg.id, index: idx + 1, shortName: bg.shortName, name: bg.name, color: bg.color, x: 0, y: 0, visible: false };
       }
-    > = {};
-
-    if (!this.container || !this.camera) return result;
-
-    const width = this.container.clientWidth;
-    const height = this.container.clientHeight;
-    const defs = this.laptop.getHotspotDefinitions();
-
-    defs.forEach((def) => {
-      const obj = def.getObject();
-      if (!obj) return;
-
-      const worldPos = new THREE.Vector3();
-      obj.localToWorld(worldPos.copy(def.localOffset));
-
       const projected = worldPos.clone().project(this.camera);
-
-      // Si está por delante de la cámara y dentro del cuadrante visible
-      const inFront = projected.z < 1;
-      const x = ((projected.x + 1) / 2) * width;
-      const y = ((-projected.y + 1) / 2) * height;
-
-      // Margen de seguridad para no salirse de los límites visibles de la ventana
-      const inBounds = x >= 30 && x <= width - 30 && y >= 60 && y <= height - 90;
-
-      result[def.id] = {
+      const x = ((projected.x + 1) / 2) * w;
+      const y = ((-projected.y + 1) / 2) * h;
+      const visible = projected.z < 1 && x >= 10 && x <= w - 10 && y >= 10 && y <= h - 10;
+      return {
+        id: bg.id,
+        index: idx + 1,
+        shortName: bg.shortName,
+        name: bg.name,
+        color: bg.color,
         x,
         y,
-        visible: inFront && inBounds,
-        name: def.name,
-        code: def.code,
-        badge: def.badge,
-        metric: def.metric,
-        targetId: def.targetId
+        visible
       };
     });
-
-    return result;
   }
 
-  /**
-   * Bucle principal de renderizado continuo a 60/120 FPS con suavizado cinemático
-   */
   private startLoop(): void {
     const animate = () => {
       this.animationFrameId = requestAnimationFrame(animate);
-
       const delta = Math.min(this.clock.getDelta(), 0.1);
 
-      // Actualizar modelo 3D (ventiladores, rotaciones y partículas térmicas)
-      this.laptop.update(delta, this.fanRPM);
+      const w = this.container.clientWidth || window.innerWidth;
+      const h = this.container.clientHeight || window.innerHeight;
+      if (this.renderer.domElement.width !== Math.floor(w * this.renderer.getPixelRatio()) ||
+          this.renderer.domElement.height !== Math.floor(h * this.renderer.getPixelRatio())) {
+        this.camera.aspect = w / Math.max(1, h);
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(w, h);
+      }
+      const {
+        explosion,
+        enabledSystems,
+        selectedId,
+        isolatedId,
+        boardMode,
+        boardProgress,
+        demoAngle,
+        lidAngle
+      } = this.stateParams;
 
-      // Amortiguamiento cinemático de cámara o actualización de OrbitControls
-      if (!this.isInspecting) {
-        const damp = 1 - Math.exp(-20 * delta);
-        this.camera.position.lerp(this.desiredCameraPos, damp);
-        this.currentCameraTarget.lerp(this.desiredCameraTarget, damp);
-        this.camera.lookAt(this.currentCameraTarget);
+      this.shadowPlane.visible = !boardMode && explosion < 0.62 && !isolatedId;
+
+      this.laptop.updateAssemblyState({
+        explosion,
+        enabledSystems,
+        selectedId,
+        isolatedId,
+        boardMode,
+        boardProgress,
+        lidAngle,
+        viewportWidth: w,
+        viewportHeight: h,
+        delta,
+        fanRPM: 2800 + explosion * 2400
+      });
+
+      this.controls.enabled = demoAngle === undefined && (explosion < 0.96 || !!isolatedId) && !boardMode;
+
+      // En modo Knolling (explosion > 0.65), interpolar cámara hacia el frente [0, 0, Z_front]
+      if (!boardMode && explosion > 0.65 && !isolatedId) {
+        const p = THREE.MathUtils.smoothstep(explosion, 0.65, 1.0);
+        const isNarrow = w < 580;
+        const baseR = (isNarrow ? 18.0 : 14.5) + 0.65 * 2.8;
+        const angle = demoAngle ?? 0.62;
+        const orbitPos = new THREE.Vector3(Math.sin(angle) * baseR, 8.1, Math.cos(angle) * baseR);
+        const frontZ = 5 / Math.tan(THREE.MathUtils.degToRad(18)); // 15.3884
+        const knollCamPos = new THREE.Vector3(0, 0, frontZ);
+
+        this.camera.position.copy(orbitPos.lerp(knollCamPos, p));
+        this.controls.target.set(0, 1.55 * (1 - p), -0.1 * (1 - p));
+        this.controls.update();
+      } else if (!boardMode && demoAngle !== undefined) {
+        const isNarrow = w < 580;
+        const rDist = (isNarrow ? 18.0 : 14.5) + explosion * 2.8;
+        this.camera.position.set(Math.sin(demoAngle) * rDist, 6.8 + explosion * 2.1, Math.cos(demoAngle) * rDist);
+        this.controls.target.set(0, 1.1 + explosion * 0.8, -0.1);
+        this.controls.update();
+      } else if (this.needsCameraSync) {
+        const damp = 1 - Math.exp(-8 * delta);
+        this.camera.position.lerp(this.desiredCamPos, damp);
+        this.controls.target.lerp(this.desiredTarget, damp);
+        this.controls.update();
+        if (this.camera.position.distanceTo(this.desiredCamPos) < 0.015) {
+          this.needsCameraSync = false;
+        }
       } else {
         this.controls.update();
       }
@@ -598,21 +438,16 @@ export class SceneManager {
     animate();
   }
 
-  /**
-   * Libera recursos WebGL y listeners de eventos al desmontar el componente React
-   */
   public dispose(): void {
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
     }
-
     window.removeEventListener('resize', this.onWindowResize);
-    this.container.removeEventListener('mousemove', this.onPointerMove);
-    this.container.removeEventListener('click', this.onPointerDown);
-
+    this.renderer.domElement.removeEventListener('pointerdown', this.onPointerDown);
+    this.renderer.domElement.removeEventListener('pointerup', this.onPointerUp);
     this.controls.dispose();
     this.renderer.dispose();
-    if (this.renderer.domElement && this.renderer.domElement.parentNode) {
+    if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
     }
   }

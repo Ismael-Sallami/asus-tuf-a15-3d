@@ -1,6 +1,44 @@
 /**
- * Tipos e interfaces para el despiece interactivo del ASUS TUF Gaming A15
+ * Tipos e interfaces para el explorador 3D interactivo del ASUS TUF Gaming A15 (FA507NV)
  */
+
+export type SystemId = 'enclosure' | 'power' | 'cooling' | 'computing' | 'display';
+
+export interface SystemDefinition {
+  id: SystemId;
+  label: string;
+  color: string;
+  description: string;
+}
+
+export interface PartDefinition {
+  id: string;
+  name: string;
+  shortDesc: string;
+  system: SystemId;
+  description: string;
+  detail: string;
+  material: string;
+  location: string;
+  at: [number, number, number];
+  spread: [number, number, number];
+  sizeSpan: number;
+  specs?: { label: string; value: string }[];
+}
+
+export interface BoardGroupDefinition {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string;
+  location: string;
+  detail: string;
+  color: string;
+  position: [number, number, number];
+  size: [number, number, number];
+  spread: [number, number, number];
+  source: string;
+}
 
 export interface ComponentDetail {
   id: string;
@@ -13,30 +51,6 @@ export interface ComponentDetail {
   highlightColor?: string;
 }
 
-export interface DisassemblyPhase {
-  id: number;
-  title: string;
-  code: string;
-  summary: string;
-  targetComponent: string;
-  cameraPosition: [number, number, number];
-  cameraTarget: [number, number, number];
-  explodedProgress: number; // 0 a 1
-}
-
 export type ViewMode = 'normal' | 'xray' | 'thermal';
-
-export type AppTheme = 'cyber' | 'studio' | 'blueprint';
-
-export interface TelemetryState {
-  fps: number;
-  cpuTemp: number;
-  gpuTemp: number;
-  fanSpeedRPM: number;
-  disassemblyPercent: number;
-  currentPhase: number;
-  isInspecting: boolean;
-  selectedComponent: ComponentDetail | null;
-  viewMode: ViewMode;
-  audioEnabled: boolean;
-}
+export type AppTheme = 'studio' | 'cyber' | 'blueprint';
+export type CameraPreset = 'perspective' | 'top' | 'front' | 'bottom' | 'left' | 'right';
